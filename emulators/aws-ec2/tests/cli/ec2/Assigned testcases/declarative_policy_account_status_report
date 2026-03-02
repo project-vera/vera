@@ -1,0 +1,11 @@
+**To describe declarative policies reports**
+
+The following ``describe-declarative-policies-reports`` example describes all declarative policies reports. ::
+
+    aws ec2 describe-declarative-policies-reports
+
+Output::
+
+    {
+        "Reports": []
+    }
