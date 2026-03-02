@@ -1,0 +1,14 @@
+**To create an FPGA image**
+
+The following ``create-fpga-image`` example creates an AFI from the specified tarball in S3. ::
+
+    aws ec2 create-fpga-image \
+        --name my-afi \
+        --input-storage-location Bucket=my-bucket,Key=my-afi.tar
+
+Output::
+
+    {
+        "FpgaImageId": "afi-0abcdef1234567890",
+        "FpgaImageGlobalId": "agfi-0abcdef1234567890"
+    }
