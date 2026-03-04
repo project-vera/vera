@@ -1,14 +1,11 @@
-**To confirm a product instance**
+**To describe reserved instances**
 
-The following ``confirm-product-instance`` example confirms the product instance. ::
+The following ``describe-reserved-instances`` example describes all reserved instances in your account. ::
 
-    aws ec2 confirm-product-instance \
-        --product-code 774F4FF8 \
-        --instance-id i-1234567890abcdef0
+    aws ec2 describe-reserved-instances
 
 Output::
 
     {
-        "OwnerId": "123456789012",
-        "Return": true
+        "ReservedInstances": []
     }
