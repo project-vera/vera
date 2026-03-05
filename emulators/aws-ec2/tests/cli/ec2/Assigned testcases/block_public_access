@@ -1,11 +1,13 @@
-**To describe Elastic IP addresses**
+**To describe VPC block public access options**
 
-The following ``describe-addresses`` example describes all Elastic IP addresses in your account. ::
+The following ``describe-vpc-block-public-access-options`` example describes the current VPC BPA options. ::
 
-    aws ec2 describe-addresses
+    aws ec2 describe-vpc-block-public-access-options
 
 Output::
 
     {
-        "Addresses": []
+        "VpcBlockPublicAccessOptions": {
+            "InternetGatewayBlockMode": "off"
+        }
     }
