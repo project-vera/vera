@@ -109,10 +109,10 @@ Failed: 138 (53.1%)
 Total runtime: 1947.95s (32.47 minutes)
 
 ================================================================================
-Emulator: EVALUATION COMPLETE
+EVALUATION COMPLETE
 ================================================================================
-Total commands: 263
-Successful: 210 (79.8%)
-Failed: 53 (20.2%)
-Total runtime: 248.92s (4.15 minutes)
+Total commands: 274
+Successful: 221 (80.7%)
+Failed: 53 (19.3%)
+Total runtime: 248.73s (4.15 minutes)
 ```

@@ -17,14 +17,17 @@ aws --endpoint-url=http://localhost:4566 ec2 create-dhcp-options --dhcp-configur
 aws --endpoint-url=http://localhost:4566 ec2 create-fpga-image --name my-afi --description test-afi --input-storage-location Bucket=my-fpga-bucket,Key=dcp/17_12_22-103226.Developer_CL.tar --logs-storage-location Bucket=my-fpga-bucket,Key=logs
 aws --endpoint-url=http://localhost:4566 ec2 create-instance-event-window --region us-east-1 --time-range StartWeekDay=monday,StartHour=2,EndWeekDay=wednesday,EndHour=8 --tag-specifications "ResourceType=instance-event-window,Tags=[{Key=K1,Value=V1}]" --name myEventWindowName
 aws --endpoint-url=http://localhost:4566 ec2 create-instance-event-window --region us-east-1 --cron-expression "* 21-23 * * 2,3" --tag-specifications "ResourceType=instance-event-window,Tags=[{Key=K1,Value=V1}]" --name myEventWindowName
+aws --endpoint-url=http://localhost:4566 ec2 create-internet-gateway
 aws --endpoint-url=http://localhost:4566 ec2 create-internet-gateway --tag-specifications ResourceType=internet-gateway,Tags=[{Key=Name,Value=my-igw}]
 aws --endpoint-url=http://localhost:4566 ec2 create-ipam-resource-discovery --description 'Example-resource-discovery' --tag-specifications 'ResourceType=ipam-resource-discovery,Tags=[{Key=cost-center,Value=cc123}]' --operating-regions RegionName='us-west-1' RegionName='us-west-2' --region us-east-1
 aws --endpoint-url=http://localhost:4566 ec2 create-ipam --description "Example description" --operating-regions "RegionName=us-east-2" "RegionName=us-west-1" --tag-specifications 'ResourceType=ipam,Tags=[{Key=Name,Value=ExampleIPAM}]'
 aws --endpoint-url=http://localhost:4566 ec2 create-ipam --description "Example description" --operating-regions "RegionName=us-east-2" "RegionName=us-west-1" --tag-specifications ResourceType=ipam,Tags=[{Key=Name,Value=ExampleIPAM}]
-aws --endpoint-url=http://localhost:4566 ec2 create-key-pair --key-name MyKeyPair
+aws --endpoint-url=http://localhost:4566 ec2 create-key-pair --key-name MyKeyPair --query "KeyMaterial" --output text > MyKeyPair.pem
+aws --endpoint-url=http://localhost:4566 ec2 create-key-pair --key-name MyKeyPair --key-type ed25519
 aws --endpoint-url=http://localhost:4566 ec2 create-launch-template --launch-template-name TemplateForWebServer --version-description WebVersion1 --launch-template-data '{"NetworkInterfaces":[{"AssociatePublicIpAddress":true,"DeviceIndex":0,"Ipv6AddressCount":1,"SubnetId":"subnet-7b16de0c"}],"ImageId":"ami-8c1be5f6","InstanceType":"t2.small","TagSpecifications":[{"ResourceType":"instance","Tags":[{"Key":"purpose","Value":"webserver"}]}]}'
 aws --endpoint-url=http://localhost:4566 ec2 create-launch-template --launch-template-name TemplateForAutoScaling --version-description AutoScalingVersion1 --launch-template-data '{"NetworkInterfaces":[{"DeviceIndex":0,"AssociatePublicIpAddress":true,"Groups":["sg-7c227019,sg-903004f8"],"DeleteOnTermination":true}],"ImageId":"ami-b42209de","InstanceType":"m4.large","TagSpecifications":[{"ResourceType":"instance","Tags":[{"Key":"environment","Value":"production"},{"Key":"purpose","Value":"webserver"}]},{"ResourceType":"volume","Tags":[{"Key":"environment","Value":"production"},{"Key":"cost-center","Value":"cc123"}]}],"BlockDeviceMappings":[{"DeviceName":"/dev/sda1","Ebs":{"VolumeSize":100}}]}' --region us-east-1
 aws --endpoint-url=http://localhost:4566 ec2 create-managed-prefix-list --address-family IPv4 --max-entries 10 --entries Cidr=10.0.0.0/16,Description=vpc-a Cidr=10.2.0.0/16,Description=vpc-b --prefix-list-name vpc-cidrs
+aws --endpoint-url=http://localhost:4566 ec2 create-managed-prefix-list --address-family IPv6 --max-entries 5 --entries Cidr=2001:db8::/32,Description=ipv6-range-a Cidr=2001:db8:1::/48,Description=ipv6-range-b --prefix-list-name ipv6-cidrs
 aws --endpoint-url=http://localhost:4566 ec2 create-network-insights-path --source igw-0797cccdc9d73b0e5 --destination i-0495d385ad28331c7 --destination-port 22 --protocol TCP
 aws --endpoint-url=http://localhost:4566 ec2 create-placement-group --group-name my-cluster --strategy cluster
 aws --endpoint-url=http://localhost:4566 ec2 create-placement-group --group-name HDFS-Group-A --strategy partition --partition-count 5
@@ -255,6 +258,17 @@ aws --endpoint-url=http://localhost:4566 ec2 report-instance-status --instances 
 aws --endpoint-url=http://localhost:4566 ec2 reset-ebs-default-kms-key-id
 aws --endpoint-url=http://localhost:4566 ec2 restore-address-to-classic --public-ip 198.51.100.0
 aws --endpoint-url=http://localhost:4566 ec2 revoke-security-group-ingress --group-name mySecurityGroup
+aws --endpoint-url=http://localhost:4566 ec2 create-verified-access-instance --tag-specifications 'ResourceType=verified-access-instance,Tags=[{Key=Name,Value=my-va-instance}]'
+aws --endpoint-url=http://localhost:4566 ec2 create-verified-access-trust-provider --trust-provider-type user --user-trust-provider-type iam-identity-center --policy-reference-name idc --tag-specifications 'ResourceType=verified-access-trust-provider,Tags=[{Key=Name,Value=my-va-trust-provider}]'
+aws --endpoint-url=http://localhost:4566 ec2 create-vpn-gateway --type ipsec.1 --amazon-side-asn 65001 --tag-specifications 'ResourceType=vpn-gateway,Tags=[{Key=Name,Value=my-vgw}]'
+aws --endpoint-url=http://localhost:4566 ec2 create-vpc --cidr-block 10.0.0.0/16 --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=my-vgw-vpc}]'
+aws --endpoint-url=http://localhost:4566 ec2 import-image --disk-containers 'Format=ova,UserBucket={S3Bucket=my-import-bucket,S3Key=vms/my-server-vm.ova}' --description "My imported server VM"
+aws --endpoint-url=http://localhost:4566 ec2 create-volume --volume-type gp3 --size 100 --availability-zone us-east-1a --tag-specifications 'ResourceType=volume,Tags=[{Key=Name,Value=my-data-volume}]'
+aws --endpoint-url=http://localhost:4566 ec2 create-vpc --cidr-block 10.0.0.0/16 --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=my-endpoint-vpc}]'
+aws --endpoint-url=http://localhost:4566 ec2 create-vpc-endpoint-service-configuration --network-load-balancer-arns arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/net/nlb-vpce/e94221227f1ba532 --acceptance-required --tag-specifications 'ResourceType=vpc-endpoint-service,Tags=[{Key=Name,Value=my-endpoint-service}]'
+aws --endpoint-url=http://localhost:4566 ec2 describe-vpc-endpoint-service-configurations --filters Name=service-id,Values=vpce-svc-03d5ebb7d9579a2b3
+aws --endpoint-url=http://localhost:4566 ec2 describe-vpc-endpoint-connections --filters Name=service-id,Values=vpce-svc-03d5ebb7d9579a2b3 Name=vpc-endpoint-state,Values=pendingAcceptance
+aws --endpoint-url=http://localhost:4566 ec2 create-vpc --cidr-block 10.0.0.0/16 --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=my-vpc}]'
 aws --endpoint-url=http://localhost:4566 ec2 wait key-pair-exists --key-names my-key-pair
 aws --endpoint-url=http://localhost:4566 ec2 wait spot-instance-request-fulfilled --filters Name=launched-availability-zone,Values=us-east-1
 aws --endpoint-url=http://localhost:4566 ec2 withdraw-byoip-cidr
