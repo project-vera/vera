@@ -258,6 +258,17 @@ awscli ec2 report-instance-status --instances i-1234567890abcdef0 --status impai
 awscli ec2 reset-ebs-default-kms-key-id
 awscli ec2 restore-address-to-classic --public-ip 198.51.100.0
 awscli ec2 revoke-security-group-ingress --group-name mySecurityGroup
+awscli ec2 create-verified-access-instance --tag-specifications 'ResourceType=verified-access-instance,Tags=[{Key=Name,Value=my-va-instance}]'
+awscli ec2 create-verified-access-trust-provider --trust-provider-type user --user-trust-provider-type iam-identity-center --policy-reference-name idc --tag-specifications 'ResourceType=verified-access-trust-provider,Tags=[{Key=Name,Value=my-va-trust-provider}]'
+awscli ec2 create-vpn-gateway --type ipsec.1 --amazon-side-asn 65001 --tag-specifications 'ResourceType=vpn-gateway,Tags=[{Key=Name,Value=my-vgw}]'
+awscli ec2 create-vpc --cidr-block 10.0.0.0/16 --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=my-vgw-vpc}]'
+awscli ec2 import-image --disk-containers 'Format=ova,UserBucket={S3Bucket=my-import-bucket,S3Key=vms/my-server-vm.ova}' --description "My imported server VM"
+awscli ec2 create-volume --volume-type gp3 --size 100 --availability-zone us-east-1a --tag-specifications 'ResourceType=volume,Tags=[{Key=Name,Value=my-data-volume}]'
+awscli ec2 create-vpc --cidr-block 10.0.0.0/16 --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=my-endpoint-vpc}]'
+awscli ec2 create-vpc-endpoint-service-configuration --network-load-balancer-arns arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/net/nlb-vpce/e94221227f1ba532 --acceptance-required --tag-specifications 'ResourceType=vpc-endpoint-service,Tags=[{Key=Name,Value=my-endpoint-service}]'
+awscli ec2 describe-vpc-endpoint-service-configurations --filters Name=service-id,Values=vpce-svc-03d5ebb7d9579a2b3
+awscli ec2 describe-vpc-endpoint-connections --filters Name=service-id,Values=vpce-svc-03d5ebb7d9579a2b3 Name=vpc-endpoint-state,Values=pendingAcceptance
+awscli ec2 create-vpc --cidr-block 10.0.0.0/16 --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=my-vpc}]'
 awscli ec2 wait key-pair-exists --key-names my-key-pair
 awscli ec2 wait spot-instance-request-fulfilled --filters Name=launched-availability-zone,Values=us-east-1
 awscli ec2 withdraw-byoip-cidr
