@@ -1,5 +1,5 @@
 services:
-  vera:
+  vera-aws:
     build:
       context: emulators/aws-ec2
     ports:

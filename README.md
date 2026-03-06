@@ -65,7 +65,7 @@ gcloud compute instances list --project=vera-project
 To start only one cloud:
 
 ```bash
-docker compose up -d vera      # AWS only
+docker compose up -d vera-aws  # AWS only
 docker compose up -d vera-gcp  # GCP only
 ```
 
