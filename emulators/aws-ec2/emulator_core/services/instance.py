@@ -92,7 +92,8 @@ class Instance:
     tag_set: List[Any] = field(default_factory=list)
     tpm_support: str = ""
     usage_operation: str = ""
-    usage_operation_update_time: str = ""
+    # Has to assign a time string here to avoid invalid timestamp errors from AWS CLI
+    usage_operation_update_time: str = datetime.now(timezone.utc).isoformat()
     virtualization_type: str = ""
     vpc_id: str = ""
 
