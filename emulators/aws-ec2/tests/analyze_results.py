@@ -26,7 +26,7 @@ def analyze_results(results_file):
     total = len(commands)
     
     for cmd_data in commands.values():
-        if cmd_data.get('restart_success') and cmd_data.get('result'):
+        if cmd_data.get('restart_success') != False and cmd_data.get('result'):
             if cmd_data['result']['success']:
                 successful += 1
     
