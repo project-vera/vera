@@ -52,7 +52,7 @@ Output::
                 "LaunchedAvailabilityZone": "us-east-2b",
                 "ProductDescription": "Linux/UNIX",
                 "SpotInstanceRequestId": "sir-08b93456",
-                "SpotPrice": "0.010000"
+                "SpotPrice": "0.010000",
                 "State": "active",
                 "Status": {
                     "Code": "fulfilled",

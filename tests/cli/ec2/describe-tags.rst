@@ -130,3 +130,17 @@ Output::
           }
       ]
   }
+
+**Example 6: To list resource IDs that match a tag filter**
+
+The following ``describe-tags`` example returns only the resource IDs for subnets tagged ``Environment=prod``. ::
+
+    aws ec2 describe-tags \
+        --filters Name=resource-type,Values=subnet Name=key,Values=Environment Name=value,Values=prod \
+        --query "Tags[*].ResourceId" \
+        --output text
+
+Output::
+
+    subnet-0abc1234def567890
+    subnet-0123abcd4567ef890

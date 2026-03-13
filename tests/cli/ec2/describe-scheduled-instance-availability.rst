@@ -41,3 +41,11 @@ To narrow the results, you can add filters that specify the operating system, ne
 Command:
 
   --filters Name=platform,Values=Linux/UNIX Name=network-platform,Values=EC2-VPC Name=instance-type,Values=c4.large
+
+**To describe available schedules for a specific instance type**
+
+This example narrows the results to Linux/UNIX ``c4.large`` schedules in EC2-VPC.
+
+Command::
+
+  aws ec2 describe-scheduled-instance-availability --recurrence Frequency=Weekly,Interval=1,OccurrenceDays=[1] --first-slot-start-time-range EarliestTime=2016-01-31T00:00:00Z,LatestTime=2016-01-31T04:00:00Z --filters Name=platform,Values=Linux/UNIX Name=network-platform,Values=EC2-VPC Name=instance-type,Values=c4.large

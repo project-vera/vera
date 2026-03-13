@@ -48,7 +48,7 @@ Launch-specification.json::
     "InstanceType": "c4.large",
     "Placement": {
       "AvailabilityZone": "us-west-2b"
-    }
+    },
     "IamInstanceProfile": {
         "Name": "my-iam-role"
     }

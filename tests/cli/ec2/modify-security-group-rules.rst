@@ -12,4 +12,18 @@ Output::
         "Return": true
     }
 
+**To modify a security group rule to update the description and port range**
+
+The following ``modify-security-group-rules`` example updates the description and the port range of a TCP ingress rule for HTTPS traffic. ::
+
+    aws ec2 modify-security-group-rules \
+        --group-id sg-1234567890abcdef0 \
+        --security-group-rules SecurityGroupRuleId=sgr-bcdef01234567890a,SecurityGroupRule='{Description=HTTPS access for corporate clients,IpProtocol=tcp,FromPort=443,ToPort=443,CidrIpv4=203.0.113.0/24}'
+
+Output::
+
+    {
+        "Return": true
+    }
+
 For more information about security group rules, see `Security group rules <https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/security-group-rules.html>`__ in the *Amazon EC2 User Guide*.

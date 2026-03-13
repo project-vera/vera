@@ -77,6 +77,19 @@ Output::
     ]
   }
 
+**To list the IDs of active Spot fleet requests**
+
+This example lists the IDs of Spot fleet requests that are currently active.
+
+Command::
+
+  aws ec2 describe-spot-fleet-requests --query "SpotFleetRequestConfigs[?SpotFleetRequestState=='active'].SpotFleetRequestId" --output text
+
+Output::
+
+  sfr-73fbd2ce-aa30-494c-8788-1cee4EXAMPLE
+  sfr-306341ed-9739-402e-881b-ce47bEXAMPLE
+
 **To describe a Spot fleet request**
 
 This example describes the specified Spot fleet request.

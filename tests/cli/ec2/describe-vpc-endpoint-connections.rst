@@ -19,3 +19,32 @@ Output::
         }
     ]
   }
+
+**To describe VPC endpoint connections for a specific endpoint service**
+
+This example describes the interface endpoint connections for the specified endpoint service.
+
+Command::
+
+  aws ec2 describe-vpc-endpoint-connections --filters Name=service-id,Values=vpce-svc-0abced088d20def56
+
+Output::
+
+  {
+    "VpcEndpointConnections": [
+        {
+            "VpcEndpointId": "vpce-0abed31004e618123",
+            "ServiceId": "vpce-svc-0abced088d20def56",
+            "CreationTimestamp": "2017-11-30T10:00:24.350Z",
+            "VpcEndpointState": "available",
+            "VpcEndpointOwner": "123456789012"
+        },
+        {
+            "VpcEndpointId": "vpce-0f46ed8b3a1c9d456",
+            "ServiceId": "vpce-svc-0abced088d20def56",
+            "CreationTimestamp": "2017-12-01T08:42:10.000Z",
+            "VpcEndpointState": "available",
+            "VpcEndpointOwner": "210987654321"
+        }
+    ]
+  }
