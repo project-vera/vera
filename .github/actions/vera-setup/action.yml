@@ -56,7 +56,7 @@ runs:
         TIMEOUT=${{ inputs.wait-timeout }}
         ELAPSED=0
         echo "Waiting for AWS emulator at ${{ inputs.aws-endpoint }} (timeout: ${TIMEOUT}s)..."
-        until curl -sf "${{ inputs.aws-endpoint }}" > /dev/null 2>&1; do
+        until curl -s --max-time 2 "${{ inputs.aws-endpoint }}" > /dev/null 2>&1; do
           if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
             echo "Timed out waiting for AWS emulator after ${TIMEOUT}s"
             echo "=== vera-aws logs ==="
@@ -75,7 +75,7 @@ runs:
         TIMEOUT=${{ inputs.wait-timeout }}
         ELAPSED=0
         echo "Waiting for GCP emulator at ${{ inputs.gcp-endpoint }} (timeout: ${TIMEOUT}s)..."
-        until curl -sf "${{ inputs.gcp-endpoint }}" > /dev/null 2>&1; do
+        until curl -s --max-time 2 "${{ inputs.gcp-endpoint }}" > /dev/null 2>&1; do
           if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
             echo "Timed out waiting for GCP emulator after ${TIMEOUT}s"
             echo "=== vera-gcp logs ==="
