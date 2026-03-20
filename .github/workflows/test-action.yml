@@ -1,13 +1,6 @@
 name: Test vera-setup Action
 
 on:
-  push:
-    branches: [main, feat/github_action_integration]
-    paths:
-      - '.github/actions/vera-setup/**'
-      - '.github/workflows/test-action.yml'
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 jobs:
