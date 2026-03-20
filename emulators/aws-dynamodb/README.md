@@ -159,28 +159,12 @@ Passed:  36  (81.1%)
 Failed:  8   (18.9%)
 ```
 
-Failures are DynamoDB Local limitations — operations it doesn't implement (tagging, backups, DAX-adjacent endpoints). These are not vera state machine failures.
-
 Options:
 
 ```bash
-python eval_emulator.py test.sh --start-from 10      # resume from command 10
-python eval_emulator.py test.sh --checkpoint out.json # custom output file
-python eval_emulator.py test.sh --endpoint http://localhost:5006
-```
-
-### Regenerate test.sh
-
-```bash
-cd tests
-python -c "
-import sys; sys.path.insert(0, '.')
-from utils.print_commands_with_endpoint import print_commands
-from utils.parse_aws_commands import parse_aws_commands_from_directory
-from pathlib import Path
-data = parse_aws_commands_from_directory(Path('cli/dynamodb'), quiet=True)
-print_commands(data, include_id=False, include_file=False)
-" > test.sh
+python eval_emulator.py --start-from 10               # resume from command 10
+python eval_emulator.py --checkpoint out.json         # custom output file
+python eval_emulator.py --endpoint http://localhost:5006
 ```
 
 ### e2e tests (boto3)
@@ -204,6 +188,72 @@ Blocked operations return the same error codes as real DynamoDB:
 - `ResourceInUseException` — table exists or is in a conflicting state
 - `ResourceNotFoundException` — table does not exist
 
+## API Coverage
+
+### Supported operations
+
+vera supports all operations that DynamoDB Local 3.3.0 implements. Table lifecycle operations go through vera's state machine; all others are proxied directly.
+
+| Layer | Operations |
+|---|---|
+| State machine | `CreateTable`, `DeleteTable`, `UpdateTable` |
+| Proxied directly | `DescribeTable`, `ListTables`, `PutItem`, `GetItem`, `UpdateItem`, `DeleteItem`, `BatchGetItem`, `BatchWriteItem`, `Query`, `Scan`, `TransactGetItems`, `TransactWriteItems`, `DescribeTimeToLive`, `UpdateTimeToLive`, `DescribeLimits`, and all other core data-plane operations |
+
+### Unsupported operations
+
+The following operations are not implemented by DynamoDB Local 3.3.0 and return `UnknownOperationException`. They are not emulated by vera either.
+
+| Category | Operations |
+|---|---|
+| Backups | `CreateBackup`, `DeleteBackup`, `DescribeBackup`, `ListBackups`, `RestoreTableFromBackup`, `RestoreTableToPointInTime`, `DescribeContinuousBackups`, `UpdateContinuousBackups` |
+| Global Tables | `CreateGlobalTable`, `DescribeGlobalTable`, `DescribeGlobalTableSettings`, `ListGlobalTables`, `UpdateGlobalTable`, `UpdateGlobalTableSettings` |
+| Contributor Insights | `DescribeContributorInsights`, `ListContributorInsights`, `UpdateContributorInsights` |
+| Other | `DescribeEndpoints`, `DescribeTableReplicaAutoScaling`, `UpdateTableReplicaAutoScaling` |
+
+## Test Coverage
+
+Test commands are sourced from 41 RST example files crawled from the [aws-cli examples](https://github.com/aws/aws-cli/tree/develop/awscli/examples/dynamodb) repo, covering 74 example commands in total.
+
+### Command filtering
+
+| Filter | Count | Reason |
+|---|---|---|
+| Contains `--*-id` / `--*-arn` parameters | 7 | Require dynamically generated IDs unavailable at test time |
+| Contains `file://` parameters | 23 | Require local fixture files not present in the test environment |
+| **Runnable** | **44** | Executed by the evaluator |
+
+### Output comparison
+
+The evaluator compares actual emulator output against the RST golden output after stripping fields whose values are inherently dynamic or environment-specific:
+
+| Ignored field | Reason |
+|---|---|
+| `TableStatus` | vera completes state transitions synchronously; RST shows transient states (`CREATING`, `DELETING`) that never appear in practice |
+| `CreationDateTime`, `LastIncreaseDateTime`, `LastDecreaseDateTime`, `LastUpdateToPayPerRequestDateTime`, `LatestStreamLabel` | Timestamps differ every run |
+| `TableArn`, `IndexArn`, `LatestStreamArn` | ARNs contain account ID and region, which differ from real AWS |
+| `TableId` | UUID generated per-run |
+| `ItemCount`, `TableSizeBytes`, `IndexSizeBytes` | Runtime data, not present at table creation |
+| `TableNames` | RST golden output contains real AWS account table names |
+| `NextToken` | RST pagination tokens are fake placeholders |
+
+Comparison uses **subset matching**: expected fields must be present and equal in the actual response, but the actual response may contain additional fields. List fields (e.g. `AttributeDefinitions`, `KeySchema`) are compared order-independently.
+
+`TableId` and `TableArn` are not used as inputs to any subsequent command in the RST examples — DynamoDB always references tables by name, not ID or ARN — so ignoring them does not mask cross-command dependency issues.
+
+### Results
+
+| Metric | Count | % of runnable |
+|---|---|---|
+| Runnable commands | 44 | — |
+| Exit OK + output match | 7 | 15.9% |
+| Exit failed (UnknownOperationException) | 22 | 50.0% |
+| Exit failed (table not found / state ordering) | 12 | 27.3% |
+| Exit failed (shell parse error) | 3 | 6.8% |
+
+The 22 `UnknownOperationException` failures are expected — they correspond exactly to the unsupported operations listed above. The 12 "table not found" failures are caused by RST files that assume a pre-existing table without a preceding `CreateTable` step (single-command examples that expect the table to already exist). The 3 shell parse errors are RST formatting issues in the aws-cli examples themselves (unbalanced quotes).
+
+Excluding the structurally-unrunnable commands (UnknownOperationException + shell errors), the effective pass rate is **7/19 = 36.8%** for commands that could succeed.
+
 ## Configuration
 
 | Environment variable | Default | Description |
@@ -213,11 +263,3 @@ Blocked operations return the same error codes as real DynamoDB:
 | `DYNAMODB_LOCAL_URL` | `http://localhost:8000` | DynamoDB Local endpoint |
 | `DYNAMODB_LOCAL_JAR` | `./dynamodb-local/DynamoDBLocal.jar` | Path to DynamoDB Local JAR |
 | `DYNAMODB_LOCAL_LIB` | `./dynamodb-local/DynamoDBLocal_lib` | Path to native libs |
-
-## Supported Operations
-
-All DynamoDB API operations are supported. Table lifecycle operations go through vera's state machine; all others are proxied directly.
-
-**State machine layer:** `CreateTable`, `DeleteTable`, `UpdateTable`
-
-**Proxied directly:** `DescribeTable`, `ListTables`, `PutItem`, `GetItem`, `UpdateItem`, `DeleteItem`, `BatchGetItem`, `BatchWriteItem`, `Query`, `Scan`, `TransactGetItems`, `TransactWriteItems`, `DescribeTimeToLive`, `UpdateTimeToLive`, and all other DynamoDB operations.
