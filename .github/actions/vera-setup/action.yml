@@ -45,13 +45,13 @@ runs:
           docker rm -f vera-aws 2>/dev/null || true
           docker run -d --name vera-aws \
             -p 5003:5003 \
-            ghcr.io/zhuochenghe/vera/vera-aws:latest
+            ghcr.io/zhuochenghe/vera/vera-aws:latest  # TODO: change to ghcr.io/project-vera/vera/vera-aws after merge + publish
         fi
         if [ "${{ inputs.start-gcp }}" = "true" ]; then
           docker rm -f vera-gcp 2>/dev/null || true
           docker run -d --name vera-gcp \
             -p 9100:9100 \
-            ghcr.io/zhuochenghe/vera/vera-gcp:latest
+            ghcr.io/zhuochenghe/vera/vera-gcp:latest  # TODO: change to ghcr.io/project-vera/vera/vera-gcp after merge + publish
         fi
 
     - name: Wait for AWS emulator
