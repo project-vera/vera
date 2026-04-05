@@ -57,7 +57,7 @@ Output::
 
     {
         "BackupDetails": {
-            "BackupArn": "arn:aws:dynamodb:us-west-2:123456789012:table/MusicCollection/backup/01576616366715-b4e58d3a",
+            "BackupArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection/backup/01576616366715-b4e58d3a",
             "BackupName": "MusicCollectionBackup",
             "BackupSizeBytes": 0,
             "BackupStatus": "CREATING",

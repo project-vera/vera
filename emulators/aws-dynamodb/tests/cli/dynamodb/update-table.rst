@@ -88,7 +88,7 @@ Output::
             },
             "TableSizeBytes": 182,
             "ItemCount": 2,
-            "TableArn": "arn:aws:dynamodb:us-west-2:123456789012:table/MusicCollection",
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection",
             "TableId": "abcd0123-01ab-23cd-0123-abcdef123456",
             "BillingModeSummary": {
                 "BillingMode": "PROVISIONED",
@@ -100,6 +100,53 @@ Output::
 For more information, see `Updating a Table <https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/WorkingWithTables.Basics.html#WorkingWithTables.Basics.UpdateTable>`__ in the *Amazon DynamoDB Developer Guide*.
 
 **Example 2: To create a global secondary index**
+
+First, create the ``MusicCollection`` table. ::
+
+    aws dynamodb create-table \
+        --table-name MusicCollection \
+        --attribute-definitions AttributeName=Artist,AttributeType=S AttributeName=SongTitle,AttributeType=S \
+        --key-schema AttributeName=Artist,KeyType=HASH AttributeName=SongTitle,KeyType=RANGE \
+        --provisioned-throughput ReadCapacityUnits=15,WriteCapacityUnits=10
+
+Output::
+
+    {
+        "TableDescription": {
+            "AttributeDefinitions": [
+                {
+                    "AttributeName": "Artist",
+                    "AttributeType": "S"
+                },
+                {
+                    "AttributeName": "SongTitle",
+                    "AttributeType": "S"
+                }
+            ],
+            "TableName": "MusicCollection",
+            "KeySchema": [
+                {
+                    "AttributeName": "Artist",
+                    "KeyType": "HASH"
+                },
+                {
+                    "AttributeName": "SongTitle",
+                    "KeyType": "RANGE"
+                }
+            ],
+            "TableStatus": "CREATING",
+            "CreationDateTime": "2024-01-01T00:00:00.000000+00:00",
+            "ProvisionedThroughput": {
+                "NumberOfDecreasesToday": 0,
+                "ReadCapacityUnits": 15,
+                "WriteCapacityUnits": 10
+            },
+            "TableSizeBytes": 0,
+            "ItemCount": 0,
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection",
+            "TableId": "a1b2c3d4-5678-90ab-cdef-EXAMPLE11111"
+        }
+    }
 
 The following example adds a global secondary index to the ``MusicCollection`` table. ::
 
@@ -170,7 +217,7 @@ Output::
             },
             "TableSizeBytes": 182,
             "ItemCount": 2,
-            "TableArn": "arn:aws:dynamodb:us-west-2:123456789012:table/MusicCollection",
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection",
             "TableId": "abcd0123-01ab-23cd-0123-abcdef123456",
             "BillingModeSummary": {
                 "BillingMode": "PROVISIONED",
@@ -197,7 +244,7 @@ Output::
                     },
                     "IndexSizeBytes": 0,
                     "ItemCount": 0,
-                    "IndexArn": "arn:aws:dynamodb:us-west-2:123456789012:table/MusicCollection/index/AlbumTitle-index"
+                    "IndexArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection/index/AlbumTitle-index"
                 }
             ]
         }
@@ -207,13 +254,15 @@ For more information, see `Updating a Table <https://docs.aws.amazon.com/amazond
 
 **Example 3: To enable DynamoDB Streams on a table**
 
-First, create the ``MusicCollection`` table. ::
+First, create the ``MusicCollection`` table with both a local secondary index and a global secondary index. ::
 
     aws dynamodb create-table \
         --table-name MusicCollection \
-        --attribute-definitions AttributeName=Artist,AttributeType=S AttributeName=SongTitle,AttributeType=S \
+        --attribute-definitions AttributeName=Artist,AttributeType=S AttributeName=SongTitle,AttributeType=S AttributeName=AlbumTitle,AttributeType=S \
         --key-schema AttributeName=Artist,KeyType=HASH AttributeName=SongTitle,KeyType=RANGE \
-        --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5
+        --local-secondary-indexes "IndexName=AlbumTitleIndex,KeySchema=[{AttributeName=Artist,KeyType=HASH},{AttributeName=AlbumTitle,KeyType=RANGE}],Projection={ProjectionType=INCLUDE,NonKeyAttributes=[Year,Genre]}" \
+        --global-secondary-indexes "IndexName=AlbumTitle-index,KeySchema=[{AttributeName=AlbumTitle,KeyType=HASH}],Projection={ProjectionType=ALL},ProvisionedThroughput={ReadCapacityUnits=10,WriteCapacityUnits=10}" \
+        --provisioned-throughput ReadCapacityUnits=15,WriteCapacityUnits=10
 
 Output::
 
@@ -226,6 +275,10 @@ Output::
                 },
                 {
                     "AttributeName": "SongTitle",
+                    "AttributeType": "S"
+                },
+                {
+                    "AttributeName": "AlbumTitle",
                     "AttributeType": "S"
                 }
             ],
@@ -244,8 +297,8 @@ Output::
             "CreationDateTime": "2024-01-01T00:00:00.000000+00:00",
             "ProvisionedThroughput": {
                 "NumberOfDecreasesToday": 0,
-                "ReadCapacityUnits": 5,
-                "WriteCapacityUnits": 5
+                "ReadCapacityUnits": 15,
+                "WriteCapacityUnits": 10
             },
             "TableSizeBytes": 0,
             "ItemCount": 0,
@@ -299,7 +352,7 @@ Output::
             },
             "TableSizeBytes": 182,
             "ItemCount": 2,
-            "TableArn": "arn:aws:dynamodb:us-west-2:123456789012:table/MusicCollection",
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection",
             "TableId": "abcd0123-01ab-23cd-0123-abcdef123456",
             "BillingModeSummary": {
                 "BillingMode": "PROVISIONED",
@@ -327,7 +380,7 @@ Output::
                     },
                     "IndexSizeBytes": 139,
                     "ItemCount": 2,
-                    "IndexArn": "arn:aws:dynamodb:us-west-2:123456789012:table/MusicCollection/index/AlbumTitleIndex"
+                    "IndexArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection/index/AlbumTitleIndex"
                 }
             ],
             "GlobalSecondaryIndexes": [
@@ -350,7 +403,7 @@ Output::
                     },
                     "IndexSizeBytes": 0,
                     "ItemCount": 0,
-                    "IndexArn": "arn:aws:dynamodb:us-west-2:123456789012:table/MusicCollection/index/AlbumTitle-index"
+                    "IndexArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection/index/AlbumTitle-index"
                 }
             ],
             "StreamSpecification": {
@@ -358,7 +411,7 @@ Output::
                 "StreamViewType": "NEW_IMAGE"
             },
             "LatestStreamLabel": "2020-07-28T21:53:39.112",
-            "LatestStreamArn": "arn:aws:dynamodb:us-west-2:123456789012:table/MusicCollection/stream/2020-07-28T21:53:39.112"
+            "LatestStreamArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection/stream/2020-07-28T21:53:39.112"
         }
     }
 
@@ -366,13 +419,15 @@ For more information, see `Updating a Table <https://docs.aws.amazon.com/amazond
 
 **Example 4: To enable server-side encryption**
 
-First, create the ``MusicCollection`` table. ::
+First, create the ``MusicCollection`` table with both a local secondary index and a global secondary index. ::
 
     aws dynamodb create-table \
         --table-name MusicCollection \
-        --attribute-definitions AttributeName=Artist,AttributeType=S AttributeName=SongTitle,AttributeType=S \
+        --attribute-definitions AttributeName=Artist,AttributeType=S AttributeName=SongTitle,AttributeType=S AttributeName=AlbumTitle,AttributeType=S \
         --key-schema AttributeName=Artist,KeyType=HASH AttributeName=SongTitle,KeyType=RANGE \
-        --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5
+        --local-secondary-indexes "IndexName=AlbumTitleIndex,KeySchema=[{AttributeName=Artist,KeyType=HASH},{AttributeName=AlbumTitle,KeyType=RANGE}],Projection={ProjectionType=INCLUDE,NonKeyAttributes=[Year,Genre]}" \
+        --global-secondary-indexes "IndexName=AlbumTitle-index,KeySchema=[{AttributeName=AlbumTitle,KeyType=HASH}],Projection={ProjectionType=ALL},ProvisionedThroughput={ReadCapacityUnits=10,WriteCapacityUnits=10}" \
+        --provisioned-throughput ReadCapacityUnits=15,WriteCapacityUnits=10
 
 Output::
 
@@ -385,6 +440,10 @@ Output::
                 },
                 {
                     "AttributeName": "SongTitle",
+                    "AttributeType": "S"
+                },
+                {
+                    "AttributeName": "AlbumTitle",
                     "AttributeType": "S"
                 }
             ],
@@ -403,13 +462,32 @@ Output::
             "CreationDateTime": "2024-01-01T00:00:00.000000+00:00",
             "ProvisionedThroughput": {
                 "NumberOfDecreasesToday": 0,
-                "ReadCapacityUnits": 5,
-                "WriteCapacityUnits": 5
+                "ReadCapacityUnits": 15,
+                "WriteCapacityUnits": 10
             },
             "TableSizeBytes": 0,
             "ItemCount": 0,
             "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection",
             "TableId": "a1b2c3d4-5678-90ab-cdef-EXAMPLE11111"
+        }
+    }
+
+Enable DynamoDB Streams on the table. ::
+
+    aws dynamodb update-table \
+        --table-name MusicCollection \
+        --stream-specification StreamEnabled=true,StreamViewType=NEW_IMAGE
+
+Output::
+
+    {
+        "TableDescription": {
+            "TableName": "MusicCollection",
+            "TableStatus": "UPDATING",
+            "StreamSpecification": {
+                "StreamEnabled": true,
+                "StreamViewType": "NEW_IMAGE"
+            }
         }
     }
 
@@ -458,7 +536,7 @@ Output::
             },
             "TableSizeBytes": 182,
             "ItemCount": 2,
-            "TableArn": "arn:aws:dynamodb:us-west-2:123456789012:table/MusicCollection",
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection",
             "TableId": "abcd0123-01ab-23cd-0123-abcdef123456",
             "BillingModeSummary": {
                 "BillingMode": "PROVISIONED",
@@ -486,7 +564,7 @@ Output::
                     },
                     "IndexSizeBytes": 139,
                     "ItemCount": 2,
-                    "IndexArn": "arn:aws:dynamodb:us-west-2:123456789012:table/MusicCollection/index/AlbumTitleIndex"
+                    "IndexArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection/index/AlbumTitleIndex"
                 }
             ],
             "GlobalSecondaryIndexes": [
@@ -509,7 +587,7 @@ Output::
                     },
                     "IndexSizeBytes": 0,
                     "ItemCount": 0,
-                    "IndexArn": "arn:aws:dynamodb:us-west-2:123456789012:table/MusicCollection/index/AlbumTitle-index"
+                    "IndexArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection/index/AlbumTitle-index"
                 }
             ],
             "StreamSpecification": {
@@ -517,7 +595,7 @@ Output::
                 "StreamViewType": "NEW_IMAGE"
             },
             "LatestStreamLabel": "2020-07-28T21:53:39.112",
-            "LatestStreamArn": "arn:aws:dynamodb:us-west-2:123456789012:table/MusicCollection/stream/2020-07-28T21:53:39.112",
+            "LatestStreamArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection/stream/2020-07-28T21:53:39.112",
             "SSEDescription": {
                 "Status": "UPDATING"
             }

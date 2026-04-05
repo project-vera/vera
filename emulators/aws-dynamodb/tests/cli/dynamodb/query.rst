@@ -1,5 +1,73 @@
 **Example 1: To query a table**
 
+First, create the ``MusicCollection`` table with an ``AlbumTitleIndex`` local secondary index. ::
+
+    aws dynamodb create-table \
+        --table-name MusicCollection \
+        --attribute-definitions AttributeName=Artist,AttributeType=S AttributeName=SongTitle,AttributeType=S AttributeName=AlbumTitle,AttributeType=S \
+        --key-schema AttributeName=Artist,KeyType=HASH AttributeName=SongTitle,KeyType=RANGE \
+        --local-secondary-indexes "IndexName=AlbumTitleIndex,KeySchema=[{AttributeName=Artist,KeyType=HASH},{AttributeName=AlbumTitle,KeyType=RANGE}],Projection={ProjectionType=ALL}" \
+        --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5
+
+Output::
+
+    {
+        "TableDescription": {
+            "AttributeDefinitions": [
+                {
+                    "AttributeName": "Artist",
+                    "AttributeType": "S"
+                },
+                {
+                    "AttributeName": "SongTitle",
+                    "AttributeType": "S"
+                },
+                {
+                    "AttributeName": "AlbumTitle",
+                    "AttributeType": "S"
+                }
+            ],
+            "TableName": "MusicCollection",
+            "KeySchema": [
+                {
+                    "AttributeName": "Artist",
+                    "KeyType": "HASH"
+                },
+                {
+                    "AttributeName": "SongTitle",
+                    "KeyType": "RANGE"
+                }
+            ],
+            "TableStatus": "CREATING",
+            "CreationDateTime": "2024-01-01T00:00:00.000000+00:00",
+            "ProvisionedThroughput": {
+                "NumberOfDecreasesToday": 0,
+                "ReadCapacityUnits": 5,
+                "WriteCapacityUnits": 5
+            },
+            "TableSizeBytes": 0,
+            "ItemCount": 0,
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection",
+            "TableId": "a1b2c3d4-5678-90ab-cdef-EXAMPLE11111"
+        }
+    }
+
+Populate the table with items. ::
+
+    aws dynamodb put-item \
+        --table-name MusicCollection \
+        --item '{"Artist": {"S": "No One You Know"}, "SongTitle": {"S": "Call Me Today"}, "AlbumTitle": {"S": "Somewhat Famous"}}'
+
+This command produces no output.
+
+Add another item. ::
+
+    aws dynamodb put-item \
+        --table-name MusicCollection \
+        --item '{"Artist": {"S": "No One You Know"}, "SongTitle": {"S": "Scared of My Shadow"}, "AlbumTitle": {"S": "Blue Sky Blues"}}'
+
+This command produces no output.
+
 The following ``query`` example queries items in the ``MusicCollection`` table. The table has a hash-and-range primary key (``Artist`` and ``SongTitle``), but this query only specifies the hash key value. It returns song titles by the artist named "No One You Know". ::
 
     aws dynamodb query \
@@ -39,6 +107,74 @@ Output::
 For more information, see `Working with Queries in DynamoDB <https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.html>`__ in the *Amazon DynamoDB Developer Guide*.
 
 **Example 2: To query a table using strongly consistent reads and traverse the index in descending order**
+
+First, create the ``MusicCollection`` table with an ``AlbumTitleIndex`` local secondary index. ::
+
+    aws dynamodb create-table \
+        --table-name MusicCollection \
+        --attribute-definitions AttributeName=Artist,AttributeType=S AttributeName=SongTitle,AttributeType=S AttributeName=AlbumTitle,AttributeType=S \
+        --key-schema AttributeName=Artist,KeyType=HASH AttributeName=SongTitle,KeyType=RANGE \
+        --local-secondary-indexes "IndexName=AlbumTitleIndex,KeySchema=[{AttributeName=Artist,KeyType=HASH},{AttributeName=AlbumTitle,KeyType=RANGE}],Projection={ProjectionType=ALL}" \
+        --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5
+
+Output::
+
+    {
+        "TableDescription": {
+            "AttributeDefinitions": [
+                {
+                    "AttributeName": "Artist",
+                    "AttributeType": "S"
+                },
+                {
+                    "AttributeName": "SongTitle",
+                    "AttributeType": "S"
+                },
+                {
+                    "AttributeName": "AlbumTitle",
+                    "AttributeType": "S"
+                }
+            ],
+            "TableName": "MusicCollection",
+            "KeySchema": [
+                {
+                    "AttributeName": "Artist",
+                    "KeyType": "HASH"
+                },
+                {
+                    "AttributeName": "SongTitle",
+                    "KeyType": "RANGE"
+                }
+            ],
+            "TableStatus": "CREATING",
+            "CreationDateTime": "2024-01-01T00:00:00.000000+00:00",
+            "ProvisionedThroughput": {
+                "NumberOfDecreasesToday": 0,
+                "ReadCapacityUnits": 5,
+                "WriteCapacityUnits": 5
+            },
+            "TableSizeBytes": 0,
+            "ItemCount": 0,
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection",
+            "TableId": "a1b2c3d4-5678-90ab-cdef-EXAMPLE11111"
+        }
+    }
+
+Populate the table with items. ::
+
+    aws dynamodb put-item \
+        --table-name MusicCollection \
+        --item '{"Artist": {"S": "No One You Know"}, "SongTitle": {"S": "Call Me Today"}, "AlbumTitle": {"S": "Somewhat Famous"}}'
+
+This command produces no output.
+
+Add another item. ::
+
+    aws dynamodb put-item \
+        --table-name MusicCollection \
+        --item '{"Artist": {"S": "No One You Know"}, "SongTitle": {"S": "Scared of My Shadow"}, "AlbumTitle": {"S": "Blue Sky Blues"}}'
+
+This command produces no output.
 
 The following example performs the same query as the first example, but returns results in reverse order and uses strongly consistent reads. ::
 
@@ -83,6 +219,74 @@ Output::
 For more information, see `Working with Queries in DynamoDB <https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.html>`__ in the *Amazon DynamoDB Developer Guide*.
 
 **Example 3: To filter out specific results**
+
+First, create the ``MusicCollection`` table with an ``AlbumTitleIndex`` local secondary index. ::
+
+    aws dynamodb create-table \
+        --table-name MusicCollection \
+        --attribute-definitions AttributeName=Artist,AttributeType=S AttributeName=SongTitle,AttributeType=S AttributeName=AlbumTitle,AttributeType=S \
+        --key-schema AttributeName=Artist,KeyType=HASH AttributeName=SongTitle,KeyType=RANGE \
+        --local-secondary-indexes "IndexName=AlbumTitleIndex,KeySchema=[{AttributeName=Artist,KeyType=HASH},{AttributeName=AlbumTitle,KeyType=RANGE}],Projection={ProjectionType=ALL}" \
+        --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5
+
+Output::
+
+    {
+        "TableDescription": {
+            "AttributeDefinitions": [
+                {
+                    "AttributeName": "Artist",
+                    "AttributeType": "S"
+                },
+                {
+                    "AttributeName": "SongTitle",
+                    "AttributeType": "S"
+                },
+                {
+                    "AttributeName": "AlbumTitle",
+                    "AttributeType": "S"
+                }
+            ],
+            "TableName": "MusicCollection",
+            "KeySchema": [
+                {
+                    "AttributeName": "Artist",
+                    "KeyType": "HASH"
+                },
+                {
+                    "AttributeName": "SongTitle",
+                    "KeyType": "RANGE"
+                }
+            ],
+            "TableStatus": "CREATING",
+            "CreationDateTime": "2024-01-01T00:00:00.000000+00:00",
+            "ProvisionedThroughput": {
+                "NumberOfDecreasesToday": 0,
+                "ReadCapacityUnits": 5,
+                "WriteCapacityUnits": 5
+            },
+            "TableSizeBytes": 0,
+            "ItemCount": 0,
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection",
+            "TableId": "a1b2c3d4-5678-90ab-cdef-EXAMPLE11111"
+        }
+    }
+
+Populate the table with items. ::
+
+    aws dynamodb put-item \
+        --table-name MusicCollection \
+        --item '{"Artist": {"S": "No One You Know"}, "SongTitle": {"S": "Call Me Today"}, "AlbumTitle": {"S": "Somewhat Famous"}}'
+
+This command produces no output.
+
+Add another item. ::
+
+    aws dynamodb put-item \
+        --table-name MusicCollection \
+        --item '{"Artist": {"S": "No One You Know"}, "SongTitle": {"S": "Scared of My Shadow"}, "AlbumTitle": {"S": "Blue Sky Blues"}}'
+
+This command produces no output.
 
 The following example queries the ``MusicCollection`` but excludes results with specific values in the ``AlbumTitle`` attribute. Note that this does not affect the ``ScannedCount`` or ``ConsumedCapacity``, because the filter is applied after the items have been read. ::
 
@@ -137,6 +341,74 @@ For more information, see `Working with Queries in DynamoDB <https://docs.aws.am
 
 **Example 4: To retrieve only an item count**
 
+First, create the ``MusicCollection`` table with an ``AlbumTitleIndex`` local secondary index. ::
+
+    aws dynamodb create-table \
+        --table-name MusicCollection \
+        --attribute-definitions AttributeName=Artist,AttributeType=S AttributeName=SongTitle,AttributeType=S AttributeName=AlbumTitle,AttributeType=S \
+        --key-schema AttributeName=Artist,KeyType=HASH AttributeName=SongTitle,KeyType=RANGE \
+        --local-secondary-indexes "IndexName=AlbumTitleIndex,KeySchema=[{AttributeName=Artist,KeyType=HASH},{AttributeName=AlbumTitle,KeyType=RANGE}],Projection={ProjectionType=ALL}" \
+        --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5
+
+Output::
+
+    {
+        "TableDescription": {
+            "AttributeDefinitions": [
+                {
+                    "AttributeName": "Artist",
+                    "AttributeType": "S"
+                },
+                {
+                    "AttributeName": "SongTitle",
+                    "AttributeType": "S"
+                },
+                {
+                    "AttributeName": "AlbumTitle",
+                    "AttributeType": "S"
+                }
+            ],
+            "TableName": "MusicCollection",
+            "KeySchema": [
+                {
+                    "AttributeName": "Artist",
+                    "KeyType": "HASH"
+                },
+                {
+                    "AttributeName": "SongTitle",
+                    "KeyType": "RANGE"
+                }
+            ],
+            "TableStatus": "CREATING",
+            "CreationDateTime": "2024-01-01T00:00:00.000000+00:00",
+            "ProvisionedThroughput": {
+                "NumberOfDecreasesToday": 0,
+                "ReadCapacityUnits": 5,
+                "WriteCapacityUnits": 5
+            },
+            "TableSizeBytes": 0,
+            "ItemCount": 0,
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection",
+            "TableId": "a1b2c3d4-5678-90ab-cdef-EXAMPLE11111"
+        }
+    }
+
+Populate the table with items. ::
+
+    aws dynamodb put-item \
+        --table-name MusicCollection \
+        --item '{"Artist": {"S": "No One You Know"}, "SongTitle": {"S": "Call Me Today"}, "AlbumTitle": {"S": "Somewhat Famous"}}'
+
+This command produces no output.
+
+Add another item. ::
+
+    aws dynamodb put-item \
+        --table-name MusicCollection \
+        --item '{"Artist": {"S": "No One You Know"}, "SongTitle": {"S": "Scared of My Shadow"}, "AlbumTitle": {"S": "Blue Sky Blues"}}'
+
+This command produces no output.
+
 The following example retrieves a count of items matching the query, but does not retrieve any of the items themselves. ::
 
     aws dynamodb query \
@@ -162,6 +434,74 @@ Output::
 For more information, see `Working with Queries in DynamoDB <https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.html>`__ in the *Amazon DynamoDB Developer Guide*.
 
 **Example 5: To query an index**
+
+First, create the ``MusicCollection`` table with an ``AlbumTitleIndex`` local secondary index. ::
+
+    aws dynamodb create-table \
+        --table-name MusicCollection \
+        --attribute-definitions AttributeName=Artist,AttributeType=S AttributeName=SongTitle,AttributeType=S AttributeName=AlbumTitle,AttributeType=S \
+        --key-schema AttributeName=Artist,KeyType=HASH AttributeName=SongTitle,KeyType=RANGE \
+        --local-secondary-indexes "IndexName=AlbumTitleIndex,KeySchema=[{AttributeName=Artist,KeyType=HASH},{AttributeName=AlbumTitle,KeyType=RANGE}],Projection={ProjectionType=ALL}" \
+        --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5
+
+Output::
+
+    {
+        "TableDescription": {
+            "AttributeDefinitions": [
+                {
+                    "AttributeName": "Artist",
+                    "AttributeType": "S"
+                },
+                {
+                    "AttributeName": "SongTitle",
+                    "AttributeType": "S"
+                },
+                {
+                    "AttributeName": "AlbumTitle",
+                    "AttributeType": "S"
+                }
+            ],
+            "TableName": "MusicCollection",
+            "KeySchema": [
+                {
+                    "AttributeName": "Artist",
+                    "KeyType": "HASH"
+                },
+                {
+                    "AttributeName": "SongTitle",
+                    "KeyType": "RANGE"
+                }
+            ],
+            "TableStatus": "CREATING",
+            "CreationDateTime": "2024-01-01T00:00:00.000000+00:00",
+            "ProvisionedThroughput": {
+                "NumberOfDecreasesToday": 0,
+                "ReadCapacityUnits": 5,
+                "WriteCapacityUnits": 5
+            },
+            "TableSizeBytes": 0,
+            "ItemCount": 0,
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection",
+            "TableId": "a1b2c3d4-5678-90ab-cdef-EXAMPLE11111"
+        }
+    }
+
+Populate the table with items. ::
+
+    aws dynamodb put-item \
+        --table-name MusicCollection \
+        --item '{"Artist": {"S": "No One You Know"}, "SongTitle": {"S": "Call Me Today"}, "AlbumTitle": {"S": "Somewhat Famous"}}'
+
+This command produces no output.
+
+Add another item. ::
+
+    aws dynamodb put-item \
+        --table-name MusicCollection \
+        --item '{"Artist": {"S": "No One You Know"}, "SongTitle": {"S": "Scared of My Shadow"}, "AlbumTitle": {"S": "Blue Sky Blues"}}'
+
+This command produces no output.
 
 The following example queries the local secondary index ``AlbumTitleIndex``. The query returns all attributes from the base table that have been projected into the local secondary index. Note that when querying a local secondary index or global secondary index, you must also provide the name of the base table using the ``table-name`` parameter. ::
 

@@ -107,13 +107,13 @@ Output::
             },
             "TableSizeBytes": 0,
             "ItemCount": 0,
-            "TableArn": "arn:aws:dynamodb:us-west-2:123456789012:table/MusicCollectionRestore",
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollectionRestore",
             "TableId": "befd9e0e-1843-4dc6-a147-d6d00e85cb1f",
             "BillingModeSummary": {
                 "BillingMode": "PROVISIONED"
             },
             "RestoreSummary": {
-                "SourceTableArn": "arn:aws:dynamodb:us-west-2:123456789012:table/MusicCollection",
+                "SourceTableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection",
                 "RestoreDateTime": 1576622404.0,
                 "RestoreInProgress": true
             }

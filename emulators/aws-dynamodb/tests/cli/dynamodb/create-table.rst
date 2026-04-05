@@ -43,7 +43,7 @@ Output::
             ], 
             "ItemCount": 0, 
             "CreationDateTime": "2020-05-26T16:04:41.627000-07:00",
-            "TableArn": "arn:aws:dynamodb:us-west-2:123456789012:table/MusicCollection",
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection",
             "TableId": "a1b2c3d4-5678-90ab-cdef-EXAMPLE11111"
         }
     }
@@ -94,7 +94,7 @@ Output::
             },
             "TableSizeBytes": 0,
             "ItemCount": 0,
-            "TableArn": "arn:aws:dynamodb:us-west-2:123456789012:table/MusicCollection",
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection",
             "TableId": "a1b2c3d4-5678-90ab-cdef-EXAMPLE11111",
             "BillingModeSummary": {
                 "BillingMode": "PAY_PER_REQUEST"
@@ -149,7 +149,7 @@ Output::
             },
             "TableSizeBytes": 0,
             "ItemCount": 0,
-            "TableArn": "arn:aws:dynamodb:us-west-2:123456789012:table/MusicCollection",
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection",
             "TableId": "a1b2c3d4-5678-90ab-cdef-EXAMPLE11111",
             "SSEDescription": {
                 "Status": "ENABLED",
@@ -223,7 +223,7 @@ Output::
             },
             "TableSizeBytes": 0,
             "ItemCount": 0,
-            "TableArn": "arn:aws:dynamodb:us-west-2:123456789012:table/MusicCollection",
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection",
             "TableId": "a1b2c3d4-5678-90ab-cdef-EXAMPLE11111",
             "LocalSecondaryIndexes": [
                 {
@@ -247,7 +247,7 @@ Output::
                     },
                     "IndexSizeBytes": 0,
                     "ItemCount": 0,
-                    "IndexArn": "arn:aws:dynamodb:us-west-2:123456789012:table/MusicCollection/index/AlbumTitleIndex"
+                    "IndexArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection/index/AlbumTitleIndex"
                 }
             ]
         }
@@ -322,7 +322,7 @@ Output::
             },
             "TableSizeBytes": 0,
             "ItemCount": 0,
-            "TableArn": "arn:aws:dynamodb:us-west-2:123456789012:table/GameScores",
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/GameScores",
             "TableId": "a1b2c3d4-5678-90ab-cdef-EXAMPLE11111",
             "GlobalSecondaryIndexes": [
                 {
@@ -351,7 +351,7 @@ Output::
                     },
                     "IndexSizeBytes": 0,
                     "ItemCount": 0,
-                    "IndexArn": "arn:aws:dynamodb:us-west-2:123456789012:table/GameScores/index/GameTitleIndex"
+                    "IndexArn": "arn:aws:dynamodb:us-east-1:123456789012:table/GameScores/index/GameTitleIndex"
                 }
             ]
         }
@@ -457,7 +457,7 @@ Output::
             },
             "TableSizeBytes": 0,
             "ItemCount": 0,
-            "TableArn": "arn:aws:dynamodb:us-west-2:123456789012:table/GameScores",
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/GameScores",
             "TableId": "a1b2c3d4-5678-90ab-cdef-EXAMPLE11111",
             "GlobalSecondaryIndexes": [
                 {
@@ -483,7 +483,7 @@ Output::
                     },
                     "IndexSizeBytes": 0,
                     "ItemCount": 0,
-                    "IndexArn": "arn:aws:dynamodb:us-west-2:123456789012:table/GameScores/index/GameTitleIndex"
+                    "IndexArn": "arn:aws:dynamodb:us-east-1:123456789012:table/GameScores/index/GameTitleIndex"
                 },
                 {
                     "IndexName": "GameDateIndex",
@@ -508,7 +508,7 @@ Output::
                     },
                     "IndexSizeBytes": 0,
                     "ItemCount": 0,
-                    "IndexArn": "arn:aws:dynamodb:us-west-2:123456789012:table/GameScores/index/GameDateIndex"
+                    "IndexArn": "arn:aws:dynamodb:us-east-1:123456789012:table/GameScores/index/GameDateIndex"
                 }
             ]
         }
@@ -561,14 +561,14 @@ Output::
             },
             "TableSizeBytes": 0,
             "ItemCount": 0,
-            "TableArn": "arn:aws:dynamodb:us-west-2:123456789012:table/GameScores",
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/GameScores",
             "TableId": "a1b2c3d4-5678-90ab-cdef-EXAMPLE11111",
             "StreamSpecification": {
                 "StreamEnabled": true,
                 "StreamViewType": "NEW_AND_OLD_IMAGES"
             },
             "LatestStreamLabel": "2020-05-27T17:49:34.056",
-            "LatestStreamArn": "arn:aws:dynamodb:us-west-2:123456789012:table/GameScores/stream/2020-05-27T17:49:34.056"
+            "LatestStreamArn": "arn:aws:dynamodb:us-east-1:123456789012:table/GameScores/stream/2020-05-27T17:49:34.056"
         }
     }
 
@@ -619,14 +619,14 @@ Output::
             },
             "TableSizeBytes": 0,
             "ItemCount": 0,
-            "TableArn": "arn:aws:dynamodb:us-west-2:123456789012:table/GameScores",
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/GameScores",
             "TableId": "a1b2c3d4-5678-90ab-cdef-EXAMPLE11111",
             "StreamSpecification": {
                 "StreamEnabled": true,
                 "StreamViewType": "KEYS_ONLY"
             },
             "LatestStreamLabel": "2023-05-25T18:45:34.140",
-            "LatestStreamArn": "arn:aws:dynamodb:us-west-2:123456789012:table/GameScores/stream/2023-05-25T18:45:34.140",
+            "LatestStreamArn": "arn:aws:dynamodb:us-east-1:123456789012:table/GameScores/stream/2023-05-25T18:45:34.140",
             "DeletionProtectionEnabled": false
         }
     }
@@ -678,7 +678,7 @@ Output::
             },
             "TableSizeBytes": 0,
             "ItemCount": 0,
-            "TableArn": "arn:aws:dynamodb:us-west-2:123456789012:table/GameScores",
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/GameScores",
             "TableId": "a1b2c3d4-5678-90ab-cdef-EXAMPLE11111",
             "TableClassSummary": {
                 "TableClass": "STANDARD_INFREQUENT_ACCESS"
@@ -735,7 +735,7 @@ Output::
             },
             "TableSizeBytes": 0,
             "ItemCount": 0,
-            "TableArn": "arn:aws:dynamodb:us-west-2:123456789012:table/GameScores",
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/GameScores",
             "TableId": "a1b2c3d4-5678-90ab-cdef-EXAMPLE11111",
             "DeletionProtectionEnabled": true
         }

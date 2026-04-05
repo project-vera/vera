@@ -51,7 +51,7 @@ Create the global table with replicas. ::
 
     aws dynamodb create-global-table \
         --global-table-name MusicCollection \
-        --replication-group RegionName=us-east-2 RegionName=us-east-1 \
+        --replication-group RegionName=eu-west-1 RegionName=us-east-1 RegionName=us-east-2 \
         --region us-east-2
 
 Output::
@@ -60,10 +60,13 @@ Output::
         "GlobalTableDescription": {
             "ReplicationGroup": [
                 {
-                    "RegionName": "us-east-2"
+                    "RegionName": "eu-west-1"
                 },
                 {
                     "RegionName": "us-east-1"
+                },
+                {
+                    "RegionName": "us-east-2"
                 }
             ],
             "GlobalTableArn": "arn:aws:dynamodb::123456789012:global-table/MusicCollection",

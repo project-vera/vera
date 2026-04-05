@@ -1,5 +1,73 @@
 **Example 1: To write items atomically to one or more tables**
 
+First, create the ``MusicCollection`` table with an ``AlbumTitleIndex`` local secondary index. ::
+
+    aws dynamodb create-table \
+        --table-name MusicCollection \
+        --attribute-definitions AttributeName=Artist,AttributeType=S AttributeName=SongTitle,AttributeType=S AttributeName=AlbumTitle,AttributeType=S \
+        --key-schema AttributeName=Artist,KeyType=HASH AttributeName=SongTitle,KeyType=RANGE \
+        --local-secondary-indexes "IndexName=AlbumTitleIndex,KeySchema=[{AttributeName=Artist,KeyType=HASH},{AttributeName=AlbumTitle,KeyType=RANGE}],Projection={ProjectionType=ALL}" \
+        --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5
+
+Output::
+
+    {
+        "TableDescription": {
+            "AttributeDefinitions": [
+                {
+                    "AttributeName": "Artist",
+                    "AttributeType": "S"
+                },
+                {
+                    "AttributeName": "SongTitle",
+                    "AttributeType": "S"
+                },
+                {
+                    "AttributeName": "AlbumTitle",
+                    "AttributeType": "S"
+                }
+            ],
+            "TableName": "MusicCollection",
+            "KeySchema": [
+                {
+                    "AttributeName": "Artist",
+                    "KeyType": "HASH"
+                },
+                {
+                    "AttributeName": "SongTitle",
+                    "KeyType": "RANGE"
+                }
+            ],
+            "TableStatus": "CREATING",
+            "CreationDateTime": "2024-01-01T00:00:00.000000+00:00",
+            "ProvisionedThroughput": {
+                "NumberOfDecreasesToday": 0,
+                "ReadCapacityUnits": 5,
+                "WriteCapacityUnits": 5
+            },
+            "TableSizeBytes": 0,
+            "ItemCount": 0,
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection",
+            "TableId": "a1b2c3d4-5678-90ab-cdef-EXAMPLE11111"
+        }
+    }
+
+Populate the table with items. ::
+
+    aws dynamodb put-item \
+        --table-name MusicCollection \
+        --item '{"Artist": {"S": "Acme Band"}, "SongTitle": {"S": "Happy Day"}, "AlbumTitle": {"S": "Songs About Life"}}'
+
+This command produces no output.
+
+Add another item. ::
+
+    aws dynamodb put-item \
+        --table-name MusicCollection \
+        --item '{"Artist": {"S": "No One You Know"}, "SongTitle": {"S": "Call Me Today"}, "AlbumTitle": {"S": "Somewhat Famous"}}'
+
+This command produces no output.
+
 The following ``transact-write-items`` example updates one item and deletes another. The operation fails if either operation fails, or if either item contains a ``Rating`` attribute. ::
 
     aws dynamodb transact-write-items \
@@ -77,6 +145,69 @@ Output::
 For more information, see `Managing Complex Workflows with DynamoDB Transactions <https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transactions.html>`__ in the *Amazon DynamoDB Developer Guide*.
 
 **Example 2: To write items atomically using a client request token**
+
+First, create the ``MusicCollection`` table. ::
+
+    aws dynamodb create-table \
+        --table-name MusicCollection \
+        --attribute-definitions AttributeName=Artist,AttributeType=S AttributeName=SongTitle,AttributeType=S \
+        --key-schema AttributeName=Artist,KeyType=HASH AttributeName=SongTitle,KeyType=RANGE \
+        --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5
+
+Output::
+
+    {
+        "TableDescription": {
+            "AttributeDefinitions": [
+                {
+                    "AttributeName": "Artist",
+                    "AttributeType": "S"
+                },
+                {
+                    "AttributeName": "SongTitle",
+                    "AttributeType": "S"
+                }
+            ],
+            "TableName": "MusicCollection",
+            "KeySchema": [
+                {
+                    "AttributeName": "Artist",
+                    "KeyType": "HASH"
+                },
+                {
+                    "AttributeName": "SongTitle",
+                    "KeyType": "RANGE"
+                }
+            ],
+            "TableStatus": "CREATING",
+            "CreationDateTime": "2024-01-01T00:00:00.000000+00:00",
+            "ProvisionedThroughput": {
+                "NumberOfDecreasesToday": 0,
+                "ReadCapacityUnits": 5,
+                "WriteCapacityUnits": 5
+            },
+            "TableSizeBytes": 0,
+            "ItemCount": 0,
+            "TableArn": "arn:aws:dynamodb:us-east-1:123456789012:table/MusicCollection",
+            "TableId": "a1b2c3d4-5678-90ab-cdef-EXAMPLE11111"
+        }
+    }
+
+Populate the table with items. ::
+
+    aws dynamodb put-item \
+        --table-name MusicCollection \
+        --item '{"Artist": {"S": "Acme Band"}, "SongTitle": {"S": "Happy Day"}, "AlbumTitle": {"S": "Songs About Life"}}'
+
+This command produces no output.
+
+Add another item. ::
+
+    aws dynamodb put-item \
+        --table-name MusicCollection \
+        --item '{"Artist": {"S": "No One You Know"}, "SongTitle": {"S": "Call Me Today"}, "AlbumTitle": {"S": "Somewhat Famous"}}'
+
+This command produces no output.
 
 The following command uses a client request token to make the call to ``transact-write-items`` idempotent, meaning that multiple calls have the same effect as one single call. ::
 
