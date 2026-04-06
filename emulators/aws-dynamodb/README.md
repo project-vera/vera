@@ -159,17 +159,23 @@ With the emulator running (`uv run python main.py`):
 
 ```bash
 cd tests
-python eval_emulator.py test.sh
+uv run python eval_emulator.py
 ```
 
-The evaluator runs each command and reports pass/fail based on exit code (0 = pass). Results are saved to `eval_results.json` with full stdout/stderr for inspection.
+The evaluator runs all commands from the RST example files against the running emulator, compares output against expected golden values, and saves results to `eval_results.json`. Use `show_mismatches.py` to inspect failures:
+
+```bash
+uv run python show_mismatches.py eval_results.json
+# writes eval_results.out with expected/actual diffs for each mismatch
+```
 
 Options:
 
 ```bash
-python eval_emulator.py --start-from 10               # resume from command 10
-python eval_emulator.py --checkpoint out.json         # custom output file
-python eval_emulator.py --endpoint http://localhost:5006
+uv run python eval_emulator.py --start-from 10               # resume from command 10
+uv run python eval_emulator.py --checkpoint out.json         # custom output file
+uv run python eval_emulator.py --endpoint http://localhost:5006
+uv run python eval_emulator.py --rst create-table.rst put-item.rst  # run specific RST files only
 ```
 
 ### e2e tests (boto3)
@@ -279,20 +285,32 @@ From 74 total example commands across 41 RST files:
 
 ### Output comparison
 
-The evaluator compares actual emulator output against the RST golden output after stripping or normalizing fields that differ between local and real AWS:
+The evaluator compares actual emulator output against the RST golden output after normalizing fields that differ between local and real AWS.
 
-**Stripped fields** (removed from both sides before comparison):
+Dynamic fields fall into two categories:
+
+**Required dynamic fields** — key must be present in actual output, but the value is not compared (emulator produces these with structurally correct but different values):
 
 | Field | Reason |
 |---|---|
-| `CreationDateTime`, `LastIncreaseDateTime`, `LastDecreaseDateTime`, `LastUpdateToPayPerRequestDateTime`, `LatestStreamLabel`, `BackupCreationDateTime`, `TableCreationDateTime`, `EarliestRestorableDateTime`, `LatestRestorableDateTime`, `RestoreDateTime`, `LastUpdateDateTime` | Timestamps differ every run |
-| `TableArn`, `IndexArn`, `LatestStreamArn`, `KMSMasterKeyArn`, `BackupArn`, `GlobalTableArn`, `SourceTableArn`, `SourceBackupArn`, `AutoScalingRoleArn` | ARNs contain account ID and region, which differ from real AWS |
-| `TableId` | UUID generated per-run |
-| `ItemCount`, `TableSizeBytes`, `IndexSizeBytes`, `BackupSizeBytes` | Runtime data, not stable across runs |
-| `TableNames` | RST golden output contains real AWS account table names |
-| `NextToken` | RST pagination tokens are fake placeholders |
-| `NumberOfDecreasesToday` | DynamoDB Local does not track daily throughput decrease counts |
+| `CreationDateTime`, `LastIncreaseDateTime`, `LastDecreaseDateTime`, `LatestStreamLabel`, `BackupCreationDateTime`, `TableCreationDateTime` | Timestamps differ every run |
+| `TableArn`, `IndexArn`, `LatestStreamArn`, `BackupArn`, `GlobalTableArn`, `SourceTableArn`, `SourceBackupArn` | ARNs contain account ID / region that differ from real AWS |
+
+**Optional dynamic fields** — stripped from both sides before comparison (emulator may omit or produce different values):
+
+| Field | Reason |
+|---|---|
+| `LastUpdateToPayPerRequestDateTime`, `EarliestRestorableDateTime`, `LatestRestorableDateTime`, `RestoreDateTime`, `LastUpdateDateTime` | Timestamps emulator may omit |
+| `KMSMasterKeyArn`, `AutoScalingRoleArn` | ARNs emulator may omit |
+| `TableId` | UUID generated per-run; DynamoDB Local returns empty string |
+| `ItemCount`, `TableSizeBytes`, `IndexSizeBytes`, `BackupSizeBytes` | Runtime data reflecting actual table contents, not stable |
+| `TableNames`, `NextToken` | RST golden output contains real AWS account data / fake pagination tokens |
+| `NumberOfDecreasesToday` | DynamoDB Local does not track daily decrease counts |
 | `ContributorInsightsRuleList` | Rule names are generated |
+| `ReadCapacityUnits`, `WriteCapacityUnits` | Per-type capacity breakdown not always returned |
+| `BillingModeSummary`, `Backfilling`, `RestoreInProgress` | Fields vera may omit or handle differently |
+| `ScalingPolicies`, `PolicyName`, `TargetTrackingScalingPolicyConfiguration` | AutoScaling stubs |
+| `ReplicaProvisionedReadCapacityUnits`, `ReplicaProvisionedWriteCapacityUnits` | Replica capacity details not tracked |
 
 **Semantically compared fields** (present in comparison but normalized):
 
@@ -300,11 +318,19 @@ The evaluator compares actual emulator output against the RST golden output afte
 |---|---|
 | `TableStatus`, `IndexStatus`, `BackupStatus`, `GlobalTableStatus`, `ContributorInsightsStatus`, `ReplicaStatus`, `PointInTimeRecoveryStatus`, `ContinuousBackupsStatus` | Transient states map to their terminal equivalent: `CREATING` → `ACTIVE`, `UPDATING` → `ACTIVE`, `ENABLING` → `ENABLED`, `DISABLING` → `DISABLED`. vera completes state transitions synchronously. |
 
-Comparison uses **subset matching**: expected fields must be present and equal in the actual response, but the actual response may contain additional fields. List fields (e.g. `AttributeDefinitions`, `KeySchema`) are compared order-independently.
+Comparison uses **subset matching**: expected fields must be present and equal in the actual response, but the actual response may contain additional fields. List fields (e.g. `AttributeDefinitions`, `GlobalSecondaryIndexes`) are compared as unordered sets — each expected item must match a distinct actual item regardless of order.
 
 ### Results
 
-Results will be updated after running the evaluator with the latest RST setup changes.
+Current eval results against 41 RST example files (189 runnable commands):
+
+| Metric | Value |
+|---|---|
+| RST files passing | 40 / 41 (97.6%) |
+| Commands exit OK | 189 / 189 (100%) |
+| Commands output match | 187 / 189 (98.9%) |
+
+The 1 failing RST file (`list-contributor-insights.rst`) has pagination token handling that does not match real AWS behavior.
 
 ## Configuration
 

@@ -55,6 +55,7 @@ class BackupRecord:
     stream_specification: Optional[Dict[str, Any]]
     backup_table: str  # internal table name holding item copies
     item_count: int
+    backup_size_bytes: int
     created_at: str    # ISO-8601
     status: str = "AVAILABLE"  # AVAILABLE | DELETED
 
@@ -71,6 +72,7 @@ class BackupRecord:
             "table_id": {"S": self.table_id},
             "backup_table": {"S": self.backup_table},
             "item_count": {"N": str(self.item_count)},
+            "backup_size_bytes": {"N": str(self.backup_size_bytes)},
             "created_at": {"S": self.created_at},
             "status": {"S": self.status},
             "schema_json": {"S": json.dumps({
@@ -97,6 +99,7 @@ class BackupRecord:
             table_id=item["table_id"]["S"],
             backup_table=item["backup_table"]["S"],
             item_count=int(item["item_count"]["N"]),
+            backup_size_bytes=int(item.get("backup_size_bytes", {}).get("N", "0")),
             created_at=item["created_at"]["S"],
             status=item["status"]["S"],
             key_schema=schema["key_schema"],
@@ -117,6 +120,8 @@ class ReplicaRecord:
     kms_master_key_id: Optional[str] = None
     provisioned_throughput_override: Optional[Dict[str, Any]] = None
     global_secondary_indexes: Optional[List[Dict[str, Any]]] = None
+    autoscaling_read: Optional[Dict[str, Any]] = None
+    autoscaling_write: Optional[Dict[str, Any]] = None
 
 
 # Valid transitions: current_status -> set of allowed next statuses
@@ -147,6 +152,8 @@ class TableStateMachine:
         self.pitr_enabled: Dict[str, bool] = {}
         # Contributor Insights: (table_name, index_name|"__table__") -> "ENABLED"|"DISABLED"
         self.contributor_insights: Dict[tuple[str, str], str] = {}
+        # Tags: table_name -> {key: value}
+        self.tags: Dict[str, Dict[str, str]] = {}
         # DynamoDB Local call function — injected by main.py after init
         self._ddb_call: Optional[Callable] = None
 
@@ -222,6 +229,8 @@ class TableStateMachine:
                         kms_master_key_id=data.get("kms_master_key_id"),
                         provisioned_throughput_override=data.get("provisioned_throughput_override"),
                         global_secondary_indexes=data.get("global_secondary_indexes"),
+                        autoscaling_read=data.get("autoscaling_read"),
+                        autoscaling_write=data.get("autoscaling_write"),
                     )
             elif pk.startswith("ci#"):
                 # ci#TableName  sk=index#IndexName or sk=index#__table__
@@ -318,7 +327,41 @@ class TableStateMachine:
         self._tables.pop(table_name, None)
         self.replicas.pop(table_name, None)
         self.pitr_enabled.pop(table_name, None)
+        # Clean up contributor insights records for this table
+        ci_keys = [k for k in self.contributor_insights if k[0] == table_name]
+        for k in ci_keys:
+            del self.contributor_insights[k]
+            _, index_name = k
+            self._ddb("DeleteItem", {
+                "TableName": VERA_META_TABLE,
+                "Key": {
+                    "pk": {"S": f"ci#{table_name}"},
+                    "sk": {"S": f"index#{index_name}"},
+                },
+            })
         logger.info(f"Removed table {table_name} from state machine")
+
+    def reset(self) -> None:
+        """Clear all in-memory vera state (backups, replicas, PITR, CI, tags).
+        Used by the eval harness between test runs via /vera/reset-state.
+        """
+        self._tables.clear()
+        self.backups.clear()
+        self.replicas.clear()
+        self.pitr_enabled.clear()
+        self.contributor_insights.clear()
+        self.tags.clear()
+        # Clear persisted metadata from __vera_meta__ table
+        try:
+            items = self._scan_all(VERA_META_TABLE)
+            for item in items:
+                self._ddb("DeleteItem", {
+                    "TableName": VERA_META_TABLE,
+                    "Key": {"pk": item["pk"], "sk": item["sk"]},
+                })
+        except Exception as e:
+            logger.warning(f"vera/reset-state: failed to clear meta: {e}")
+        logger.info("vera state reset")
 
     # ------------------------------------------------------------------
     # Backup helpers (persistent)
@@ -329,7 +372,7 @@ class TableStateMachine:
         ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         uid = uuid.uuid4().hex[:8]
         return (
-            f"arn:aws:dynamodb:us-east-1:000000000000:"
+            f"arn:aws:dynamodb:us-east-1:123456789012:"
             f"table/{table_name}/backup/{ts}-{uid}"
         )
 
@@ -384,7 +427,7 @@ class TableStateMachine:
             raise RuntimeError(f"Failed to create backup table {bk_table}: {body}")
 
         # Copy all items via scan + batch write
-        item_count = self._copy_table_items(table_name, bk_table)
+        item_count, size_bytes = self._copy_table_items(table_name, bk_table)
 
         billing = table_description.get("BillingModeSummary", {}).get(
             "BillingMode",
@@ -408,6 +451,7 @@ class TableStateMachine:
             stream_specification=table_description.get("StreamSpecification"),
             backup_table=bk_table,
             item_count=item_count,
+            backup_size_bytes=size_bytes,
             created_at=datetime.now(timezone.utc).isoformat(),
         )
         self.backups[arn] = rec
@@ -420,9 +464,15 @@ class TableStateMachine:
         logger.info(f"Backup created: {arn} ({item_count} items) -> {bk_table}")
         return rec
 
-    def _copy_table_items(self, src: str, dst: str) -> int:
-        """Copy all items from src table to dst table. Returns item count."""
+    @staticmethod
+    def _item_size_bytes(item: dict) -> int:
+        """Approximate DynamoDB item size in bytes (JSON serialization of the item)."""
+        return len(json.dumps(item).encode("utf-8"))
+
+    def _copy_table_items(self, src: str, dst: str) -> tuple[int, int]:
+        """Copy all items from src table to dst table. Returns (item_count, size_bytes)."""
         count = 0
+        size_bytes = 0
         last_key = None
         while True:
             scan_payload: dict = {"TableName": src}
@@ -441,10 +491,11 @@ class TableStateMachine:
                     }
                 })
                 count += len(batch)
+                size_bytes += sum(self._item_size_bytes(it) for it in batch)
             last_key = body.get("LastEvaluatedKey")
             if not last_key:
                 break
-        return count
+        return count, size_bytes
 
     def get_backup(self, backup_arn: str) -> Optional[BackupRecord]:
         rec = self.backups.get(backup_arn)
@@ -626,6 +677,8 @@ class TableStateMachine:
             "kms_master_key_id": replica.kms_master_key_id,
             "provisioned_throughput_override": replica.provisioned_throughput_override,
             "global_secondary_indexes": replica.global_secondary_indexes,
+            "autoscaling_read": replica.autoscaling_read,
+            "autoscaling_write": replica.autoscaling_write,
         }
         self._ddb("PutItem", {
             "TableName": VERA_META_TABLE,
@@ -667,6 +720,9 @@ class TableStateMachine:
         for (tn, idx), status in self.contributor_insights.items():
             if table_name and tn != table_name:
                 continue
+            # Real AWS only returns ENABLED entries in ListContributorInsights
+            if status not in ("ENABLED", "ENABLING"):
+                continue
             entry: Dict[str, Any] = {
                 "TableName": tn,
                 "ContributorInsightsStatus": status,
@@ -675,3 +731,24 @@ class TableStateMachine:
                 entry["IndexName"] = idx
             results.append(entry)
         return results
+
+    # ------------------------------------------------------------------
+    # Tags
+    # ------------------------------------------------------------------
+
+    def tag_resource(self, table_name: str, tags: List[Dict[str, str]]) -> None:
+        if table_name not in self.tags:
+            self.tags[table_name] = {}
+        for tag in tags:
+            self.tags[table_name][tag["Key"]] = tag["Value"]
+
+    def untag_resource(self, table_name: str, tag_keys: List[str]) -> None:
+        if table_name in self.tags:
+            for key in tag_keys:
+                self.tags[table_name].pop(key, None)
+
+    def list_tags(self, table_name: str) -> List[Dict[str, str]]:
+        return [
+            {"Key": k, "Value": v}
+            for k, v in self.tags.get(table_name, {}).items()
+        ]

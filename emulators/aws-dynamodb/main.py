@@ -33,6 +33,7 @@ import os
 import socket
 import subprocess
 import time
+from typing import Optional
 
 import requests
 from flask import Flask, request, Response
@@ -59,6 +60,25 @@ sm = TableStateMachine()
 # Helpers
 # ------------------------------------------------------------------
 
+def _table_name_from_arn(arn: str) -> Optional[str]:
+    """Extract table name from a DynamoDB table ARN (any region/account)."""
+    if not arn.startswith("arn:"):
+        return None
+    parts = arn.split(":table/")
+    if len(parts) != 2:
+        return None
+    return parts[1].split("/")[0] or None
+
+
+def _fix_ddblocal_arns(content: bytes) -> bytes:
+    """Replace DynamoDB Local's fake ARN components with standard values."""
+    return (
+        content
+        .replace(b":ddblocal:", b":us-east-1:")
+        .replace(b":000000000000:", b":123456789012:")
+    )
+
+
 def json_error(code: str, message: str, http_status: int = 400) -> Response:
     body = json.dumps({"__type": code, "message": message})
     return Response(body, status=http_status, mimetype="application/x-amz-json-1.0")
@@ -78,7 +98,8 @@ def proxy(raw_body: bytes) -> Response:
             headers=headers,
             timeout=10,
         )
-        return Response(resp.content, status=resp.status_code, mimetype="application/x-amz-json-1.0")
+        content = _fix_ddblocal_arns(resp.content)
+        return Response(content, status=resp.status_code, mimetype="application/x-amz-json-1.0")
     except requests.exceptions.ConnectionError:
         return json_error(
             "ServiceUnavailableException",
@@ -177,7 +198,7 @@ def _augment_create_table_response(resp_body: dict, request_body: dict) -> dict:
         sse_entry = {"Status": "ENABLED", "SSEType": sse_spec.get("SSEType", "AES256")}
         key_id = sse_spec.get("KMSMasterKeyId")
         if key_id and not key_id.startswith("arn:"):
-            key_id = f"arn:aws:kms:us-east-1:000000000000:key/{key_id}"
+            key_id = f"arn:aws:kms:us-east-1:123456789012:key/{key_id}"
         if key_id:
             sse_entry["KMSMasterKeyArn"] = key_id
         desc["SSEDescription"] = sse_entry
@@ -226,9 +247,20 @@ def handle_delete_table(body: dict, raw_body: bytes) -> Response:
     err = sm.check_action("DeleteTable", table_name)
     if err:
         status = sm.get_status(table_name)
-        if status is None:
-            return json_error("ResourceNotFoundException", err)
-        return json_error("ResourceInUseException", err)
+        if status is not None:
+            return json_error("ResourceInUseException", err)
+        # Table not in vera state — forward to DDB Local directly (may exist there after a reset)
+        resp = proxy(raw_body)
+        if resp.status_code == 200:
+            try:
+                resp_body = json.loads(resp.get_data())
+                desc = resp_body.get("TableDescription", {})
+                desc["TableStatus"] = "DELETING"
+                resp_body["TableDescription"] = desc
+                return Response(json.dumps(resp_body), status=200, mimetype="application/x-amz-json-1.0")
+            except Exception:
+                pass
+        return resp
 
     sm.transition(table_name, "DELETING")
     resp = proxy(raw_body)
@@ -449,7 +481,7 @@ def handle_create_backup(body: dict) -> Response:
             "BackupStatus": rec.status,
             "BackupType": rec.backup_type,
             "BackupCreationDateTime": rec.created_at,
-            "BackupSizeBytes": 0,
+            "BackupSizeBytes": rec.backup_size_bytes,
             "TableArn": rec.table_arn,
             "TableName": rec.table_name,
         }
@@ -475,9 +507,25 @@ def handle_delete_backup(body: dict) -> Response:
                 "BackupStatus": "DELETED",
                 "BackupType": rec.backup_type,
                 "BackupCreationDateTime": rec.created_at,
-                "TableArn": rec.table_arn,
+                "BackupSizeBytes": rec.backup_size_bytes,
+            },
+            "SourceTableDetails": {
                 "TableName": rec.table_name,
-            }
+                "TableArn": rec.table_arn,
+                "TableId": rec.table_id,
+                "KeySchema": rec.key_schema,
+                "AttributeDefinitions": rec.attribute_definitions,
+                "BillingMode": rec.billing_mode,
+                "ProvisionedThroughput": rec.provisioned_throughput or {},
+                "TableCreationDateTime": rec.created_at,
+                "ItemCount": rec.item_count,
+            },
+            "SourceTableFeatureDetails": {
+                "GlobalSecondaryIndexes": rec.global_secondary_indexes,
+                "LocalSecondaryIndexes": rec.local_secondary_indexes,
+                **({"SSEDescription": rec.sse_description} if rec.sse_description else {}),
+                **({"StreamDescription": rec.stream_specification} if rec.stream_specification else {}),
+            },
         }
     })
 
@@ -499,7 +547,7 @@ def handle_describe_backup(body: dict) -> Response:
                 "BackupStatus": rec.status,
                 "BackupType": rec.backup_type,
                 "BackupCreationDateTime": rec.created_at,
-                "BackupSizeBytes": 0,
+                "BackupSizeBytes": rec.backup_size_bytes,
                 "TableArn": rec.table_arn,
                 "TableName": rec.table_name,
             },
@@ -544,7 +592,7 @@ def handle_list_backups(body: dict) -> Response:
                 "BackupStatus": r.status,
                 "BackupType": r.backup_type,
                 "BackupCreationDateTime": r.created_at,
-                "BackupSizeBytes": 0,
+                "BackupSizeBytes": r.backup_size_bytes,
                 "TableArn": r.table_arn,
                 "TableName": r.table_name,
                 "TableId": r.table_id,
@@ -738,7 +786,7 @@ def _restore_from_schema_and_items(target_name, rec, items) -> dict | Response:
                 logger.warning(f"Restore batch write failed at offset {i}: {bw_body}")
 
     table_desc = create_body.get("TableDescription", {})
-    return {
+    result: dict = {
         "TableName": target_name,
         "TableStatus": "ACTIVE",
         "TableArn": table_desc.get("TableArn", ""),
@@ -747,6 +795,9 @@ def _restore_from_schema_and_items(target_name, rec, items) -> dict | Response:
         "AttributeDefinitions": rec.attribute_definitions,
         "BillingModeSummary": {"BillingMode": billing},
     }
+    if "CreationDateTime" in table_desc:
+        result["CreationDateTime"] = table_desc["CreationDateTime"]
+    return result
 
 
 def _replay_pitr_log(target_name: str, source_name: str, log_entries: list) -> None:
@@ -1057,12 +1108,30 @@ def handle_update_table_replica_auto_scaling(body: dict) -> Response:
     if not sm.exists(table_name):
         return json_error("ResourceNotFoundException", f"Table '{table_name}' not found")
 
-    # Accept but don't enforce autoscaling settings
+    # Read requested autoscaling overrides (not persisted, just reflected in response)
+    rcu_update = body.get("ProvisionedReadCapacityAutoScalingUpdate", {})
+    wcu_update = body.get("ProvisionedWriteCapacityAutoScalingUpdate", {})
+
+    replicas = _build_replica_autoscaling(table_name)
+    for replica in replicas:
+        if rcu_update:
+            s = replica["ReplicaProvisionedReadCapacityAutoScalingSettings"]
+            if "MinimumUnits" in rcu_update:
+                s["MinimumUnits"] = rcu_update["MinimumUnits"]
+            if "MaximumUnits" in rcu_update:
+                s["MaximumUnits"] = rcu_update["MaximumUnits"]
+        if wcu_update:
+            s = replica["ReplicaProvisionedWriteCapacityAutoScalingSettings"]
+            if "MinimumUnits" in wcu_update:
+                s["MinimumUnits"] = wcu_update["MinimumUnits"]
+            if "MaximumUnits" in wcu_update:
+                s["MaximumUnits"] = wcu_update["MaximumUnits"]
+
     return json_ok({
         "TableAutoScalingDescription": {
             "TableName": table_name,
             "TableStatus": sm.get_status(table_name) or "ACTIVE",
-            "Replicas": _build_replica_autoscaling(table_name),
+            "Replicas": replicas,
         }
     })
 
@@ -1070,6 +1139,21 @@ def handle_update_table_replica_auto_scaling(body: dict) -> Response:
 # ------------------------------------------------------------------
 # V1 legacy global table handlers
 # ------------------------------------------------------------------
+
+def _global_table_description(global_table_name: str, replicas: dict) -> dict:
+    """Build a GlobalTableDescription with all required fields."""
+    from datetime import datetime, timezone
+    return {
+        "GlobalTableName": global_table_name,
+        "GlobalTableArn": f"arn:aws:dynamodb::123456789012:global-table/{global_table_name}",
+        "CreationDateTime": datetime.now(timezone.utc).isoformat(),
+        "GlobalTableStatus": "ACTIVE",
+        "ReplicationGroup": [
+            {"RegionName": r.region_name, "ReplicaStatus": r.replica_status}
+            for r in replicas.values()
+        ],
+    }
+
 
 def handle_create_global_table(body: dict) -> Response:
     global_table_name = body.get("GlobalTableName")
@@ -1093,16 +1177,7 @@ def handle_create_global_table(body: dict) -> Response:
         sm.add_replica(global_table_name, ReplicaRecord(region_name=region))
 
     replicas = sm.get_replicas(global_table_name)
-    return json_ok({
-        "GlobalTableDescription": {
-            "GlobalTableName": global_table_name,
-            "GlobalTableStatus": "ACTIVE",
-            "ReplicationGroup": [
-                {"RegionName": r.region_name, "ReplicaStatus": r.replica_status}
-                for r in replicas.values()
-            ],
-        }
-    })
+    return json_ok({"GlobalTableDescription": _global_table_description(global_table_name, replicas)})
 
 
 def handle_describe_global_table(body: dict) -> Response:
@@ -1115,16 +1190,7 @@ def handle_describe_global_table(body: dict) -> Response:
         return json_error("GlobalTableNotFoundException",
                           f"Global table '{global_table_name}' not found")
 
-    return json_ok({
-        "GlobalTableDescription": {
-            "GlobalTableName": global_table_name,
-            "GlobalTableStatus": "ACTIVE",
-            "ReplicationGroup": [
-                {"RegionName": r.region_name, "ReplicaStatus": r.replica_status}
-                for r in replicas.values()
-            ],
-        }
-    })
+    return json_ok({"GlobalTableDescription": _global_table_description(global_table_name, replicas)})
 
 
 def handle_list_global_tables(body: dict) -> Response:
@@ -1191,16 +1257,53 @@ def handle_update_global_table(body: dict) -> Response:
                 return json_error("ReplicaNotFoundException", err)
 
     replicas = sm.get_replicas(global_table_name)
-    return json_ok({
-        "GlobalTableDescription": {
-            "GlobalTableName": global_table_name,
-            "GlobalTableStatus": "ACTIVE",
-            "ReplicationGroup": [
-                {"RegionName": r.region_name, "ReplicaStatus": r.replica_status}
-                for r in replicas.values()
-            ],
-        }
-    })
+    return json_ok({"GlobalTableDescription": _global_table_description(global_table_name, replicas)})
+
+
+# ------------------------------------------------------------------
+# Tag handlers
+# ------------------------------------------------------------------
+
+def _resolve_table_from_resource_arn(body: dict) -> tuple[Optional[str], Optional[Response]]:
+    arn = body.get("ResourceArn", "")
+    if not arn:
+        return None, json_error("ValidationException", "ResourceArn is required")
+    table_name = _table_name_from_arn(arn)
+    if not table_name:
+        return None, json_error("ValidationException", f"Invalid ResourceArn: {arn}")
+    if not sm.exists(table_name):
+        return None, json_error("ResourceNotFoundException", f"Table not found: {table_name}", 404)
+    return table_name, None
+
+
+def handle_tag_resource(body: dict) -> Response:
+    table_name, err = _resolve_table_from_resource_arn(body)
+    if err:
+        return err
+    tags = body.get("Tags", [])
+    if not isinstance(tags, list):
+        return json_error("ValidationException", "Tags must be a list")
+    sm.tag_resource(table_name, tags)
+    return Response("", status=200, mimetype="application/x-amz-json-1.0")
+
+
+def handle_untag_resource(body: dict) -> Response:
+    table_name, err = _resolve_table_from_resource_arn(body)
+    if err:
+        return err
+    tag_keys = body.get("TagKeys", [])
+    if not isinstance(tag_keys, list):
+        return json_error("ValidationException", "TagKeys must be a list")
+    sm.untag_resource(table_name, tag_keys)
+    return Response("", status=200, mimetype="application/x-amz-json-1.0")
+
+
+def handle_list_tags_of_resource(body: dict) -> Response:
+    table_name, err = _resolve_table_from_resource_arn(body)
+    if err:
+        return err
+    tags = sorted(sm.list_tags(table_name), key=lambda t: t.get("Key", ""))
+    return json_ok({"Tags": tags})
 
 
 # ------------------------------------------------------------------
@@ -1234,7 +1337,18 @@ _VERA_HANDLERS = {
     "ListContributorInsights":            handle_list_contributor_insights,
     # Endpoints
     "DescribeEndpoints":                  handle_describe_endpoints,
+    # Tags
+    "TagResource":                        handle_tag_resource,
+    "UntagResource":                      handle_untag_resource,
+    "ListTagsOfResource":                 handle_list_tags_of_resource,
 }
+
+
+@app.route("/vera/reset-state", methods=["POST"])
+def handle_vera_reset_state():
+    """Reset all vera state machine metadata (used by eval harness between test runs)."""
+    sm.reset()
+    return Response(json.dumps({"message": "vera state reset"}), status=200, mimetype="application/json")
 
 
 @app.route("/", methods=["POST"])

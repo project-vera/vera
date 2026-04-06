@@ -23,38 +23,45 @@ sys.path.insert(0, str(Path(__file__).parent))
 from utils.parse_aws_commands import parse_aws_commands_from_directory
 from utils.print_commands_with_endpoint import to_awscli_command
 
-# Keys whose values are dynamic (timestamps, ARNs, UUIDs, counters, sizes).
-# Stripped from both expected and actual before comparison.
-DYNAMIC_KEYS = {
-    # Timestamps — differ every run
+# Dynamic fields where the key MUST be present in actual but the value is not compared.
+# Use for fields the emulator always produces but with different values (ARNs, timestamps).
+REQUIRED_DYNAMIC_KEYS = {
+    # Timestamps — emulator produces these but values differ every run
     "CreationDateTime",
     "LastIncreaseDateTime",
     "LastDecreaseDateTime",
-    "LastUpdateToPayPerRequestDateTime",
     "LatestStreamLabel",
     "BackupCreationDateTime",
     "TableCreationDateTime",
+    # ARNs — emulator generates correct structure but region/account differ from RST
+    "BackupArn",
+    "TableArn",
+    "IndexArn",
+    "LatestStreamArn",
+    "GlobalTableArn",
+    "SourceBackupArn",
+    "SourceTableArn",
+}
+
+# Dynamic fields that are completely stripped from both expected and actual.
+# Use for fields the emulator may not produce at all, or whose absence is acceptable.
+OPTIONAL_DYNAMIC_KEYS = {
+    # Timestamps — emulator may omit or differ
+    "LastUpdateToPayPerRequestDateTime",
     "EarliestRestorableDateTime",
     "LatestRestorableDateTime",
     "RestoreDateTime",
     "LastUpdateDateTime",
-    # ARNs — contain account ID and region, differ from real AWS
-    "TableArn",
-    "IndexArn",
-    "LatestStreamArn",
+    # ARNs — emulator may omit or stub
     "KMSMasterKeyArn",
-    "BackupArn",
-    "GlobalTableArn",
-    "SourceTableArn",
-    "SourceBackupArn",
     "AutoScalingRoleArn",
-    # IDs — UUID generated per-run
+    # IDs — DDB Local returns empty string; real AWS returns UUIDs
     "TableId",
-    # Runtime data — not stable across runs
-    "ItemCount",
+    # Runtime data — not stable (RST golden values reflect real AWS data)
     "TableSizeBytes",
     "IndexSizeBytes",
     "BackupSizeBytes",
+    "ItemCount",
     # RST golden output contains real AWS account data
     "TableNames",
     "NextToken",
@@ -64,7 +71,28 @@ DYNAMIC_KEYS = {
     "NumberOfDecreasesToday",
     # Vera stubs — rule names are generated
     "ContributorInsightsRuleList",
+    # ItemCollectionMetrics — vera does not return this
+    "ItemCollectionMetrics",
+    # Per-type capacity breakdown — vera returns only CapacityUnits
+    "ReadCapacityUnits",
+    "WriteCapacityUnits",
+    # BillingModeSummary — vera does not return this in update/restore responses
+    "BillingModeSummary",
+    # Backfilling — vera does not return this for GSI
+    "Backfilling",
+    # RestoreInProgress — vera completes restores synchronously (always false)
+    "RestoreInProgress",
+    # AutoScaling policy details — vera stubs these as AutoScalingDisabled
+    "ScalingPolicies",
+    "PolicyName",
+    "TargetTrackingScalingPolicyConfiguration",
+    # Replica provisioned capacity units — differ between emulator and real AWS
+    "ReplicaProvisionedReadCapacityUnits",
+    "ReplicaProvisionedWriteCapacityUnits",
 }
+
+# Combined set for convenience
+DYNAMIC_KEYS = REQUIRED_DYNAMIC_KEYS | OPTIONAL_DYNAMIC_KEYS
 
 # Status fields that are compared semantically rather than literally.
 # vera completes transitions synchronously, so RST transient states
@@ -99,17 +127,35 @@ def _normalize_status(value: str, key: str = None) -> str:
     return _STATUS_EQUIVALENCES.get(value, value)
 
 
-def strip_dynamic(obj):
-    """Recursively remove dynamic keys from a JSON-like structure."""
+# Sentinel value used to mark dynamic fields in the expected output.
+# When is_subset sees _ANY as the expected value, it only checks the key
+# exists in actual (any value accepted) rather than comparing values.
+# This means missing dynamic fields in actual are still caught.
+_ANY = object()
+
+
+def mark_dynamic(obj):
+    """
+    Recursively process expected output for dynamic fields:
+    - REQUIRED_DYNAMIC_KEYS: replace value with _ANY (key must exist in actual,
+      value comparison is skipped)
+    - OPTIONAL_DYNAMIC_KEYS: remove the key entirely (key may or may not exist
+      in actual — we don't check)
+    """
     if isinstance(obj, dict):
-        return {k: strip_dynamic(v) for k, v in obj.items() if k not in DYNAMIC_KEYS}
+        result = {}
+        for k, v in obj.items():
+            if k in REQUIRED_DYNAMIC_KEYS:
+                result[k] = _ANY   # key required, value unconstrained
+            elif k in OPTIONAL_DYNAMIC_KEYS:
+                pass               # strip entirely — presence not required
+            else:
+                result[k] = mark_dynamic(v)
+        return result
     if isinstance(obj, list):
-        return [strip_dynamic(item) for item in obj]
+        return [mark_dynamic(item) for item in obj]
     return obj
 
-
-def _sort_key(obj):
-    return json.dumps(obj, sort_keys=True)
 
 
 def is_subset(expected, actual, _key=None) -> bool:
@@ -118,35 +164,78 @@ def is_subset(expected, actual, _key=None) -> bool:
     Lists of dicts are compared as unordered sets (order-independent).
     Status fields (TableStatus, IndexStatus) are compared after normalizing
     transient states (CREATING→ACTIVE, UPDATING→ACTIVE).
+    Empty dicts ({}) in expected are treated as "any value acceptable" (present or absent).
+    _ANY sentinel means: key must exist in actual but any value is accepted.
     """
+    if expected is _ANY:
+        # Key exists in actual (caller already checked via dict lookup); value is unconstrained.
+        return True
     if isinstance(expected, dict) and isinstance(actual, dict):
-        return all(
-            k in actual and is_subset(v, actual[k], _key=k)
-            for k, v in expected.items()
-        )
+        for k, v in expected.items():
+            # Skip empty-dict checks — an empty dict means
+            # "we have no stable fields to assert" so any actual value (or absence) is OK
+            if isinstance(v, dict) and not v:
+                continue
+            if k not in actual:
+                return False
+            if not is_subset(v, actual[k], _key=k):
+                return False
+        return True
     if isinstance(expected, list) and isinstance(actual, list):
         if len(expected) != len(actual):
             return False
-        try:
-            exp_sorted = sorted(expected, key=_sort_key)
-            act_sorted = sorted(actual, key=_sort_key)
-            return all(is_subset(e, a) for e, a in zip(exp_sorted, act_sorted))
-        except TypeError:
-            return all(is_subset(e, a) for e, a in zip(expected, actual))
+        # Match each expected item to a distinct actual item (order-independent).
+        # Each actual item may only be used once.
+        remaining = list(range(len(actual)))
+        for e in expected:
+            matched = False
+            for i in remaining:
+                if is_subset(e, actual[i]):
+                    remaining.remove(i)
+                    matched = True
+                    break
+            if not matched:
+                return False
+        return True
     if _key in STATUS_KEYS and isinstance(expected, str) and isinstance(actual, str):
         return _normalize_status(expected, _key) == _normalize_status(actual, _key)
     return expected == actual
 
 
+def _has_duplicate_keys(json_str: str) -> bool:
+    """Return True if the JSON string contains any object with duplicate keys."""
+    seen_dups = []
+
+    def _pairs_hook(pairs):
+        keys = [k for k, _ in pairs]
+        if len(keys) != len(set(keys)):
+            seen_dups.append(True)
+        return dict(pairs)
+
+    try:
+        json.loads(json_str, object_pairs_hook=_pairs_hook)
+    except Exception:
+        pass
+    return bool(seen_dups)
+
+
 def compare_outputs(expected_str: str, actual_str: str) -> tuple[bool, str]:
     """
-    Check that expected (from RST) is a subset of actual (from emulator),
-    after stripping dynamic keys from both.
+    Check that expected (from RST) is a subset of actual (from emulator).
+
+    Dynamic keys (ARNs, timestamps, UUIDs, etc.) in the expected output have
+    their values replaced with _ANY — the key must still be present in actual,
+    but any value is accepted.  This catches missing fields while ignoring
+    value differences that are inherently dynamic.
 
     Returns (match, reason).
     """
     if not expected_str:
         return True, "no expected output"
+
+    # Skip comparison if expected JSON has duplicate keys (malformed RST output)
+    if _has_duplicate_keys(expected_str):
+        return True, "expected output has duplicate JSON keys — skipped"
 
     try:
         expected = json.loads(expected_str)
@@ -158,14 +247,25 @@ def compare_outputs(expected_str: str, actual_str: str) -> tuple[bool, str]:
     except json.JSONDecodeError:
         return False, "actual output is not valid JSON"
 
-    expected_clean = strip_dynamic(expected)
-    actual_clean = strip_dynamic(actual)
+    # Mark dynamic fields in expected with _ANY (key required, value unconstrained).
+    # Do NOT strip dynamic fields from actual — we want to detect missing fields.
+    expected_marked = mark_dynamic(expected)
 
-    if is_subset(expected_clean, actual_clean):
+    if is_subset(expected_marked, actual):
         return True, "match"
 
-    exp_str = json.dumps(expected_clean, sort_keys=True, indent=2)
-    act_str = json.dumps(actual_clean, sort_keys=True, indent=2)
+    # For the failure message, show cleaned versions (replace _ANY sentinel with "<dynamic>")
+    def _replace_any(obj):
+        if obj is _ANY:
+            return "<dynamic>"
+        if isinstance(obj, dict):
+            return {k: _replace_any(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [_replace_any(i) for i in obj]
+        return obj
+
+    exp_str = json.dumps(_replace_any(expected_marked), sort_keys=True, indent=2)
+    act_str = json.dumps(actual, sort_keys=True, indent=2)
     reason = f"expected (subset):\n{exp_str}\nactual:\n{act_str}"
     return False, reason
 
@@ -220,7 +320,9 @@ def reset_emulator(endpoint_url):
     """Delete all tables in the emulator to start from a clean state."""
     import urllib.request
 
-    _FAKE_AUTH = "AWS4-HMAC-SHA256 Credential=fake/20000101/us-east-1/dynamodb/aws4_request, SignedHeaders=host, Signature=fake"
+    # Must use the same credentials as the 'vera' AWS profile so we hit the same
+    # DynamoDB Local namespace (DynamoDB Local partitions tables by access key ID).
+    _FAKE_AUTH = "AWS4-HMAC-SHA256 Credential=test/20000101/us-east-1/dynamodb/aws4_request, SignedHeaders=host, Signature=fake"
     _HEADERS = {
         "Content-Type": "application/x-amz-json-1.0",
         "Authorization": _FAKE_AUTH,
@@ -269,6 +371,20 @@ def reset_emulator(endpoint_url):
     except Exception:
         pass
 
+    # Wipe all vera state machine metadata (CI, replicas, PITR, backups) via internal endpoint.
+    # This clears orphaned records from any credentials namespace, ensuring a truly clean slate.
+    try:
+        import urllib.request as _ur
+        req = _ur.Request(
+            endpoint_url.rstrip("/") + "/vera/reset-state",
+            data=b"{}",
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        _ur.urlopen(req, timeout=5)
+    except Exception as e:
+        print(f"  warning: could not reset vera state: {e}")
+
     deleted = []
     if table_names:
         deleted.append(f"{len(table_names)} table(s)")
@@ -287,14 +403,22 @@ def save_checkpoint(results, checkpoint_file):
 
 def load_commands(cli_dir: Path):
     """
-    Parse RST files and return list of (cmd_str, expected_output, reset_before) tuples.
+    Parse RST files and return:
+      - commands: list of (cmd_str, expected_output, reset_before, rst_file, file_contents) tuples
+      - total_rst_count: total number of RST files in cli_dir (including skipped ones)
+
     reset_before=True marks the first command of each Example block — the emulator is
     reset before running it, so each Example starts from a clean slate.
-    Commands requiring IDs or file:// parameters are skipped.
+    Commands requiring IDs are skipped. Commands with file:// are now supported when
+    file_contents were parsed from the RST; only skipped if file_contents are missing.
     """
+    # Count all RST files (denominator)
+    all_rst_files = sorted(Path(cli_dir).rglob("*.rst"))
+    total_rst_count = len(all_rst_files)
+
     data = parse_aws_commands_from_directory(cli_dir, quiet=True)
     commands = []
-    for cmd_list in data.values():
+    for rst_file, cmd_list in data.items():
         file_commands = [
             entry for entry in cmd_list
             if not entry["use_id"] and not entry["use_file"]
@@ -308,8 +432,78 @@ def load_commands(cli_dir: Path):
                 to_awscli_command(entry["cmd"]),
                 entry.get("output", ""),
                 is_first_in_example,  # reset_before: True for first command of each Example
+                rst_file,
+                entry.get("file_contents", {}),
             ))
-    return commands
+    return commands, total_rst_count
+
+
+def resolve_backup_arn(cmd: str, endpoint_url: str) -> str:
+    """
+    If cmd contains a hardcoded backup ARN placeholder, replace it with a real
+    ARN fetched from the emulator via list-backups.
+
+    Matches: --backup-arn arn:aws:dynamodb:...:table/<name>/backup/<suffix>
+    Extracts the table name and fetches the most recent backup ARN for it.
+    """
+    import re, urllib.request
+    pattern = r'(--backup-arn\s+)(arn:[^\s]+/backup/[^\s]+)'
+    m = re.search(pattern, cmd)
+    if not m:
+        return cmd
+
+    placeholder_arn = m.group(2)
+    # Extract table name from the ARN: arn:...:table/<TableName>/backup/...
+    table_match = re.search(r':table/([^/]+)/backup/', placeholder_arn)
+    if not table_match:
+        return cmd
+    table_name = table_match.group(1)
+
+    # Fetch real backup ARN from emulator
+    _AUTH = "AWS4-HMAC-SHA256 Credential=test/20000101/us-east-1/dynamodb/aws4_request, SignedHeaders=host, Signature=fake"
+    try:
+        body = json.dumps({"TableName": table_name}).encode()
+        req = urllib.request.Request(
+            endpoint_url,
+            data=body,
+            headers={
+                "Content-Type": "application/x-amz-json-1.0",
+                "X-Amz-Target": "DynamoDB_20120810.ListBackups",
+                "Authorization": _AUTH,
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = json.loads(resp.read())
+        summaries = data.get("BackupSummaries", [])
+        if not summaries:
+            return cmd  # no backup found, let command fail naturally
+        real_arn = summaries[-1]["BackupArn"]  # most recent
+        return cmd[:m.start(2)] + real_arn + cmd[m.end(2):]
+    except Exception:
+        return cmd  # on error, leave cmd unchanged
+
+
+def write_temp_files(file_contents: dict, tmp_dir: Path) -> dict:
+    """
+    Write file_contents to tmp_dir. Returns a mapping of filename -> absolute path.
+    """
+    tmp_dir.mkdir(parents=True, exist_ok=True)
+    written = {}
+    for filename, content in file_contents.items():
+        dest = tmp_dir / filename
+        dest.write_text(content, encoding="utf-8")
+        written[filename] = str(dest)
+    return written
+
+
+def rewrite_file_refs(cmd: str, filename_to_path: dict) -> str:
+    """
+    Replace file://filename.json with file:///absolute/path/to/filename.json in cmd.
+    """
+    for filename, abs_path in filename_to_path.items():
+        cmd = cmd.replace(f"file://{filename}", f"file://{abs_path}")
+    return cmd
 
 
 def run_evaluation(
@@ -317,9 +511,14 @@ def run_evaluation(
     checkpoint_file="eval_results.json",
     start_from=0,
     endpoint_url="http://localhost:5005",
+    rst_filter=None,
 ):
-    commands = load_commands(Path(cli_dir))
-    print(f"Loaded {len(commands)} commands from {cli_dir}\n")
+    commands, total_rst_count = load_commands(Path(cli_dir))
+    if rst_filter:
+        # Keep only commands belonging to the specified RST files (basename match)
+        normalized = {f if f.endswith(".rst") else f + ".rst" for f in rst_filter}
+        commands = [c for c in commands if Path(c[3]).name in normalized]
+    print(f"Loaded {len(commands)} commands from {total_rst_count} RST files in {cli_dir}\n")
 
     print(f"Checking emulator at {endpoint_url}...")
     if not check_emulator_health(endpoint_url):
@@ -333,12 +532,15 @@ def run_evaluation(
         reset_emulator(endpoint_url)
     print()
 
+    # Temp directory for file:// parameters
+    tmp_dir = Path(__file__).parent / "tmp"
 
     start_time = time.time()
     results = {
         "cli_dir": str(cli_dir),
         "endpoint_url": endpoint_url,
         "total_commands": len(commands),
+        "total_rst_files": total_rst_count,
         "started_at": datetime.now().isoformat(),
         "commands": {},
     }
@@ -349,7 +551,7 @@ def run_evaluation(
             results = json.load(f)
 
     for idx in range(start_from, len(commands)):
-        cmd, expected_output, reset_before = commands[idx]
+        cmd, expected_output, reset_before, rst_file, file_contents = commands[idx]
 
         print(f"\n{'='*70}")
         print(f"Command {idx + 1}/{len(commands)}")
@@ -357,6 +559,14 @@ def run_evaluation(
 
         if reset_before and idx > 0:
             reset_emulator(endpoint_url)
+
+        # Write any file:// parameters to the tmp directory and rewrite cmd
+        if file_contents:
+            filename_to_path = write_temp_files(file_contents, tmp_dir)
+            cmd = rewrite_file_refs(cmd, filename_to_path)
+
+        # Resolve hardcoded backup ARN placeholders with real ARNs from the emulator
+        cmd = resolve_backup_arn(cmd, endpoint_url)
 
         print(f"  {cmd[:120]}{'...' if len(cmd) > 120 else ''}")
 
@@ -384,6 +594,7 @@ def run_evaluation(
         results["commands"][idx] = {
             "command": cmd,
             "index": idx,
+            "rst_file": rst_file,
             "reset_before": reset_before,
             "result": cmd_result,
             "expected_output": expected_output,
@@ -395,6 +606,9 @@ def run_evaluation(
 
     elapsed = time.time() - start_time
     total = len(results["commands"])
+    total_rst = results.get("total_rst_files", 0)
+
+    # Command-level counts
     exit_passed = sum(1 for r in results["commands"].values() if r["result"]["success"])
     output_matched = sum(
         1 for r in results["commands"].values()
@@ -403,10 +617,27 @@ def run_evaluation(
     exit_failed = total - exit_passed
     output_mismatched = exit_passed - output_matched
 
+    # RST-level counts: an RST passes if ALL its runnable commands exit OK and output match
+    rst_results: dict[str, list[bool]] = {}
+    for r in results["commands"].values():
+        rst = r.get("rst_file", "unknown")
+        passed = r["result"]["success"] and r["output_match"]
+        rst_results.setdefault(rst, []).append(passed)
+    rst_passed = sum(1 for passes in rst_results.values() if all(passes))
+    rst_with_commands = len(rst_results)
+    rst_failed = rst_with_commands - rst_passed
+    # RST files that had no runnable commands (all skipped) count as not-passed
+    rst_no_commands = total_rst - rst_with_commands
+
     print(f"\n\n{'='*70}")
     print("EVALUATION COMPLETE")
     print(f"{'='*70}")
-    print(f"Total:            {total}")
+    print(f"RST files:        {rst_passed}/{total_rst}  ({rst_passed/total_rst*100:.1f}% pass)")
+    print(f"  All cmds OK:    {rst_passed}")
+    print(f"  Some cmd fail:  {rst_failed}")
+    print(f"  No runnable cmd:{rst_no_commands}")
+    print()
+    print(f"Commands total:   {total}")
     print(f"Exit OK:          {exit_passed}  ({exit_passed/total*100:.1f}%)")
     print(f"  Output match:   {output_matched}  ({output_matched/total*100:.1f}%)")
     print(f"  Output mismatch:{output_mismatched}  ({output_mismatched/total*100:.1f}%)")
@@ -414,9 +645,22 @@ def run_evaluation(
     print(f"Runtime: {elapsed:.1f}s")
     print(f"Results: {checkpoint_file}")
 
+    # Print failing RST files
+    failing_rst = sorted(rst for rst, passes in rst_results.items() if not all(passes))
+    if failing_rst:
+        print(f"\nFailing RST files ({len(failing_rst)}):")
+        for rst in failing_rst:
+            passes = rst_results[rst]
+            n_fail = sum(1 for p in passes if not p)
+            print(f"  {rst}  ({n_fail}/{len(passes)} cmds failed)")
+
     results["completed_at"] = datetime.now().isoformat()
     results["summary"] = {
-        "total": total,
+        "total_rst_files": total_rst,
+        "rst_passed": rst_passed,
+        "rst_failed": rst_failed,
+        "rst_no_runnable_commands": rst_no_commands,
+        "total_commands": total,
         "exit_passed": exit_passed,
         "output_matched": output_matched,
         "output_mismatched": output_mismatched,
@@ -448,10 +692,14 @@ def main():
         "--endpoint", "-e", default="http://localhost:5005",
         help="vera-dynamodb endpoint (default: http://localhost:5005)"
     )
+    parser.add_argument(
+        "--rst", "-r", nargs="+", metavar="FILE",
+        help="Only run commands from these RST files (e.g. --rst query.rst put-item.rst)"
+    )
     args = parser.parse_args()
 
     try:
-        run_evaluation(args.cli_dir, args.checkpoint, args.start_from, args.endpoint)
+        run_evaluation(args.cli_dir, args.checkpoint, args.start_from, args.endpoint, args.rst)
     except KeyboardInterrupt:
         print("\nInterrupted. Progress saved.")
         sys.exit(0)

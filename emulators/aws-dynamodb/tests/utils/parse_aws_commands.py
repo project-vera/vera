@@ -15,9 +15,8 @@ def has_id_parameter(command):
         r'--id\b',             # Matches --id exactly
         r'--[\w-]*-ids\b',     # Matches --instance-ids, --vpc-endpoint-ids, etc.
         r'--ids\b',            # Matches --ids exactly
-        r'--[\w-]*-arn[\b\s]', # Matches --backup-arn, --table-arn, etc.
-        r'--[\w-]*-arnarn:',   # Matches RST typo --backup-arnarn:aws:...
-        r'--arn\b',            # Matches --arn exactly
+        # ARN patterns removed: vera emulator generates real ARNs dynamically,
+        # so --backup-arn, --resource-arn etc. are now runnable with setup commands.
         r'--resources\b',      # Matches --resources exactly
     ]
     for pattern in id_patterns:
@@ -71,6 +70,38 @@ def extract_output(lines, start_idx):
     return output
 
 
+def extract_file_contents(lines, start_idx, end_idx):
+    """
+    Extract all 'Contents of ``filename``::' blocks between start_idx and end_idx.
+    Returns a dict mapping filename -> file content string.
+    """
+    file_contents = {}
+    i = start_idx
+    # Pattern: Contents of ``filename``::  or  Contents of the ``filename`` file::
+    file_header_re = re.compile(r'Contents of(?: the)? ``([^`]+)``(?: file)?::')
+    while i < end_idx:
+        line = lines[i]
+        m = file_header_re.search(line)
+        if m:
+            filename = m.group(1)
+            # Collect indented content after the header line
+            content_lines = []
+            i += 1
+            while i < end_idx:
+                content_line = lines[i]
+                # Stop if we hit a non-indented non-blank line
+                if content_line.strip() and not content_line.startswith((' ', '\t')):
+                    break
+                content_lines.append(content_line.rstrip())
+                i += 1
+            content = '\n'.join(content_lines).strip()
+            if content:
+                file_contents[filename] = content
+        else:
+            i += 1
+    return file_contents
+
+
 def parse_aws_commands(file_path):
     """Parse AWS CLI commands from an RST file with their outputs."""
     commands = []
@@ -95,7 +126,7 @@ def parse_aws_commands(file_path):
         if stripped.startswith('aws '):
             # Found an AWS command, now collect all continuation lines
             command_lines = [stripped]
-            
+
             # Check for line continuations (backslash at end, or unclosed quotes)
             j = i + 1
             while j < len(lines):
@@ -115,27 +146,42 @@ def parse_aws_commands(file_path):
             # handle ^ and ` in the command, replace with \\
             command_lines = [line.replace('^', '\\').replace('`', '\\') for line in command_lines]
             full_command = ' '.join(line.rstrip('\\').strip() for line in command_lines)
-            
+
+            # Find end of this command's section: the next aws command line or end of file
+            # We need to find the next top-level 'aws ' line to bound file_contents extraction
+            k = j
+            while k < len(lines):
+                next_stripped = lines[k].strip()
+                if next_stripped.startswith('aws '):
+                    break
+                k += 1
+            # file_contents are between end of command (j) and next command (k)
+            file_contents = {}
+            if has_file_parameter(full_command):
+                file_contents = extract_file_contents(lines, j, k)
+
             # Extract output for this command
             output = extract_output(lines, j)
-            
+
             # Check if command uses ID parameters
             use_id = has_id_parameter(full_command)
-            use_file = has_file_parameter(full_command)
-            
+            # use_file is True only if file:// is referenced but content was not found in RST
+            use_file = has_file_parameter(full_command) and not file_contents
+
             commands.append({
                 "cmd": full_command,
                 "use_id": use_id,
                 "use_file": use_file,
+                "file_contents": file_contents,
                 "output": output,
                 "example_index": current_example,
             })
-            
+
             # Move index past the command we just processed
             i = j
         else:
             i += 1
-    
+
     return commands
 
 def parse_aws_commands_from_directory(directory: Path, quiet: bool = True) -> dict[str, list[dict]]:
