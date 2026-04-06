@@ -294,23 +294,25 @@ Dynamic fields fall into two categories:
 | Field | Reason |
 |---|---|
 | `CreationDateTime`, `LastIncreaseDateTime`, `LastDecreaseDateTime`, `LatestStreamLabel`, `BackupCreationDateTime`, `TableCreationDateTime` | Timestamps differ every run |
+| `RestoreDateTime`, `LastUpdateDateTime`, `EarliestRestorableDateTime`, `LatestRestorableDateTime` | Timestamps differ every run |
 | `TableArn`, `IndexArn`, `LatestStreamArn`, `BackupArn`, `GlobalTableArn`, `SourceTableArn`, `SourceBackupArn` | ARNs contain account ID / region that differ from real AWS |
+| `KMSMasterKeyArn`, `AutoScalingRoleArn` | ARNs vera generates with fake account ID |
+| `TableId` | UUID vera generates per table (DynamoDB Local returns empty string) |
+| `ItemCount`, `TableSizeBytes`, `IndexSizeBytes`, `BackupSizeBytes` | Runtime data — vera returns actual values, RST reflects pre-populated real AWS tables |
+| `NumberOfDecreasesToday` | DynamoDB Local always returns 0; key is present |
+| `BillingModeSummary`, `Backfilling`, `RestoreInProgress` | Vera injects these; values are accurate |
+| `ContributorInsightsRuleList` | Vera generates rule names with real timestamp suffix |
+| `ScalingPolicies`, `PolicyName`, `TargetTrackingScalingPolicyConfiguration` | Vera constructs autoscaling policy stubs |
+| `ReplicaProvisionedReadCapacityUnits`, `ReplicaProvisionedWriteCapacityUnits` | Vera computes from actual table throughput |
 
-**Optional dynamic fields** — stripped from both sides before comparison (emulator may omit or produce different values):
+**Optional dynamic fields** — stripped from both sides before comparison (emulator does not produce these):
 
 | Field | Reason |
 |---|---|
-| `LastUpdateToPayPerRequestDateTime`, `EarliestRestorableDateTime`, `LatestRestorableDateTime`, `RestoreDateTime`, `LastUpdateDateTime` | Timestamps emulator may omit |
-| `KMSMasterKeyArn`, `AutoScalingRoleArn` | ARNs emulator may omit |
-| `TableId` | UUID generated per-run; DynamoDB Local returns empty string |
-| `ItemCount`, `TableSizeBytes`, `IndexSizeBytes`, `BackupSizeBytes` | Runtime data reflecting actual table contents, not stable |
+| `LastUpdateToPayPerRequestDateTime` | Only present when billing mode changed from PAY_PER_REQUEST; vera does not track |
 | `TableNames`, `NextToken` | RST golden output contains real AWS account data / fake pagination tokens |
-| `NumberOfDecreasesToday` | DynamoDB Local does not track daily decrease counts |
-| `ContributorInsightsRuleList` | Rule names are generated |
-| `ReadCapacityUnits`, `WriteCapacityUnits` | Per-type capacity breakdown not always returned |
-| `BillingModeSummary`, `Backfilling`, `RestoreInProgress` | Fields vera may omit or handle differently |
-| `ScalingPolicies`, `PolicyName`, `TargetTrackingScalingPolicyConfiguration` | AutoScaling stubs |
-| `ReplicaProvisionedReadCapacityUnits`, `ReplicaProvisionedWriteCapacityUnits` | Replica capacity details not tracked |
+| `ItemCollectionMetrics` | DynamoDB Local does not return item collection metrics |
+| `ReadCapacityUnits`, `WriteCapacityUnits` | Per-type capacity breakdown not returned in `ConsumedCapacity` by DynamoDB Local |
 
 **Semantically compared fields** (present in comparison but normalized):
 

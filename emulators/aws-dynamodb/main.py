@@ -135,7 +135,26 @@ def _describe_table_from_local(table_name: str) -> tuple[int, dict]:
     status, body = _ddb_local_call("DescribeTable", {"TableName": table_name})
     if status != 200:
         return status, body
-    return 200, body.get("Table", {})
+    table_desc = body.get("Table", {})
+    # Inject vera-generated TableId if DDB Local returned empty string
+    if not table_desc.get("TableId") and table_name in sm.table_ids:
+        table_desc["TableId"] = sm.table_ids[table_name]
+    # Inject BillingModeSummary if DDB Local omitted it
+    if "BillingModeSummary" not in table_desc:
+        billing = table_desc.get("BillingMode", "PROVISIONED")
+        table_desc["BillingModeSummary"] = {"BillingMode": billing}
+    # Normalize ProvisionedThroughput fields
+    if "ProvisionedThroughput" in table_desc:
+        _normalize_provisioned_throughput(table_desc["ProvisionedThroughput"])
+    for gsi in table_desc.get("GlobalSecondaryIndexes", []):
+        if "ProvisionedThroughput" in gsi:
+            _normalize_provisioned_throughput(gsi["ProvisionedThroughput"])
+        gsi.setdefault("IndexSizeBytes", 0)
+        gsi.setdefault("ItemCount", 0)
+    for lsi in table_desc.get("LocalSecondaryIndexes", []):
+        if "ProvisionedThroughput" in lsi:
+            _normalize_provisioned_throughput(lsi["ProvisionedThroughput"])
+    return 200, table_desc
 
 
 # ------------------------------------------------------------------
@@ -190,8 +209,42 @@ def sync_from_dynamodb_local() -> None:
 # Table lifecycle handlers
 # ------------------------------------------------------------------
 
+def _normalize_provisioned_throughput(pt: dict) -> dict:
+    """Ensure ProvisionedThroughput includes NumberOfDecreasesToday (DDB Local may omit it)."""
+    if pt and "NumberOfDecreasesToday" not in pt:
+        pt["NumberOfDecreasesToday"] = 0
+    return pt
+
+
 def _augment_create_table_response(resp_body: dict, request_body: dict) -> dict:
+    import uuid as _uuid
     desc = resp_body.get("TableDescription", {})
+
+    # Inject a real UUID for TableId (DDB Local returns empty string)
+    table_name = desc.get("TableName", request_body.get("TableName", ""))
+    if not desc.get("TableId"):
+        table_id = sm.table_ids.get(table_name)
+        if not table_id:
+            table_id = str(_uuid.uuid4())
+            sm.table_ids[table_name] = table_id
+        desc["TableId"] = table_id
+
+    # Inject BillingModeSummary if missing
+    if "BillingModeSummary" not in desc:
+        billing = request_body.get("BillingMode", "PROVISIONED")
+        desc["BillingModeSummary"] = {"BillingMode": billing}
+
+    # Normalize ProvisionedThroughput (add NumberOfDecreasesToday if missing)
+    if "ProvisionedThroughput" in desc:
+        _normalize_provisioned_throughput(desc["ProvisionedThroughput"])
+    for gsi in desc.get("GlobalSecondaryIndexes", []):
+        if "ProvisionedThroughput" in gsi:
+            _normalize_provisioned_throughput(gsi["ProvisionedThroughput"])
+        gsi.setdefault("IndexSizeBytes", 0)
+        gsi.setdefault("ItemCount", 0)
+    for lsi in desc.get("LocalSecondaryIndexes", []):
+        if "ProvisionedThroughput" in lsi:
+            _normalize_provisioned_throughput(lsi["ProvisionedThroughput"])
 
     sse_spec = request_body.get("SSESpecification", {})
     if sse_spec.get("Enabled") and "SSEDescription" not in desc:
@@ -347,13 +400,32 @@ def handle_update_table(body: dict, raw_body: bytes) -> Response:
 
     if resp.status_code == 200:
         sm.transition(table_name, "ACTIVE")
-        if sse_spec:
-            try:
-                resp_body = json.loads(resp.get_data())
-                resp_body.setdefault("TableDescription", {})["SSEDescription"] = {"Status": "UPDATING"}
-                resp = Response(json.dumps(resp_body), status=200, mimetype="application/x-amz-json-1.0")
-            except (json.JSONDecodeError, KeyError):
-                pass
+        try:
+            resp_body = json.loads(resp.get_data())
+            desc = resp_body.get("TableDescription", {})
+            if sse_spec:
+                desc["SSEDescription"] = {"Status": "UPDATING"}
+            # Inject TableId if missing
+            tname = desc.get("TableName", table_name)
+            if not desc.get("TableId") and tname in sm.table_ids:
+                desc["TableId"] = sm.table_ids[tname]
+            # Inject BillingModeSummary if missing
+            if "BillingModeSummary" not in desc:
+                billing = body.get("BillingMode") or desc.get("BillingMode", "PROVISIONED")
+                desc["BillingModeSummary"] = {"BillingMode": billing}
+            # Normalize ProvisionedThroughput fields
+            if "ProvisionedThroughput" in desc:
+                _normalize_provisioned_throughput(desc["ProvisionedThroughput"])
+            for gsi in desc.get("GlobalSecondaryIndexes", []):
+                if "ProvisionedThroughput" in gsi:
+                    _normalize_provisioned_throughput(gsi["ProvisionedThroughput"])
+                # DDB Local omits IndexSizeBytes/ItemCount for CREATING GSIs
+                gsi.setdefault("IndexSizeBytes", 0)
+                gsi.setdefault("ItemCount", 0)
+            resp_body["TableDescription"] = desc
+            resp = Response(json.dumps(resp_body), status=200, mimetype="application/x-amz-json-1.0")
+        except (json.JSONDecodeError, KeyError):
+            pass
     else:
         sm._tables[table_name] = prev_status
         logger.warning(f"UpdateTable failed for {table_name}, rolled back to {prev_status}")
@@ -384,12 +456,18 @@ def handle_describe_table(body: dict, raw_body: bytes) -> Response:
     if resp.status_code != 200:
         return resp
     table_name = body.get("TableName", "")
-    if not sm.get_replicas(table_name):
+    has_replicas = bool(sm.get_replicas(table_name))
+    has_table_id = table_name in sm.table_ids
+    if not has_replicas and not has_table_id:
         return resp
     try:
         resp_body = json.loads(resp.get_data())
         table_desc = resp_body.get("Table", {})
-        resp_body["Table"] = _inject_replicas(table_desc, table_name)
+        if has_table_id and not table_desc.get("TableId"):
+            table_desc["TableId"] = sm.table_ids[table_name]
+        if has_replicas:
+            table_desc = _inject_replicas(table_desc, table_name)
+        resp_body["Table"] = table_desc
         return Response(json.dumps(resp_body), status=200, mimetype="application/x-amz-json-1.0")
     except Exception:
         return resp
@@ -519,6 +597,7 @@ def handle_delete_backup(body: dict) -> Response:
                 "ProvisionedThroughput": rec.provisioned_throughput or {},
                 "TableCreationDateTime": rec.created_at,
                 "ItemCount": rec.item_count,
+                "TableSizeBytes": rec.backup_size_bytes,
             },
             "SourceTableFeatureDetails": {
                 "GlobalSecondaryIndexes": rec.global_secondary_indexes,
@@ -561,6 +640,7 @@ def handle_describe_backup(body: dict) -> Response:
                 "ProvisionedThroughput": rec.provisioned_throughput or {},
                 "TableCreationDateTime": rec.created_at,
                 "ItemCount": rec.item_count,
+                "TableSizeBytes": rec.backup_size_bytes,
             },
             "SourceTableFeatureDetails": {
                 "GlobalSecondaryIndexes": rec.global_secondary_indexes,
@@ -785,18 +865,16 @@ def _restore_from_schema_and_items(target_name, rec, items) -> dict | Response:
             if bw_status != 200:
                 logger.warning(f"Restore batch write failed at offset {i}: {bw_body}")
 
-    table_desc = create_body.get("TableDescription", {})
-    result: dict = {
-        "TableName": target_name,
-        "TableStatus": "ACTIVE",
-        "TableArn": table_desc.get("TableArn", ""),
-        "TableId": table_desc.get("TableId", ""),
-        "KeySchema": rec.key_schema,
-        "AttributeDefinitions": rec.attribute_definitions,
-        "BillingModeSummary": {"BillingMode": billing},
-    }
-    if "CreationDateTime" in table_desc:
-        result["CreationDateTime"] = table_desc["CreationDateTime"]
+    # Inject vera TableId now so DescribeTable picks it up
+    created_desc = create_body.get("TableDescription", {})
+    if not created_desc.get("TableId") and target_name not in sm.table_ids:
+        import uuid as _uuid
+        sm.table_ids[target_name] = str(_uuid.uuid4())
+
+    # Fetch the real description from DDB Local so all fields are populated
+    _, result = _describe_table_from_local(target_name)
+    # Patch TableStatus to ACTIVE (DDB Local may still show CREATING)
+    result["TableStatus"] = "ACTIVE"
     return result
 
 
@@ -871,13 +949,17 @@ def handle_update_continuous_backups(body: dict) -> Response:
 
     sm.set_pitr(table_name, enabled)
 
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
     pitr_status = "ENABLED" if enabled else "DISABLED"
+    pitr_desc: dict = {"PointInTimeRecoveryStatus": pitr_status}
+    if enabled:
+        pitr_desc["EarliestRestorableDateTime"] = now.isoformat()
+        pitr_desc["LatestRestorableDateTime"] = now.isoformat()
     return json_ok({
         "ContinuousBackupsDescription": {
             "ContinuousBackupsStatus": "ENABLED",
-            "PointInTimeRecoveryDescription": {
-                "PointInTimeRecoveryStatus": pitr_status,
-            },
+            "PointInTimeRecoveryDescription": pitr_desc,
         }
     })
 
@@ -902,14 +984,17 @@ def handle_describe_contributor_insights(body: dict) -> Response:
     }
     if index_name:
         result["IndexName"] = index_name
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
     if ci_status == "ENABLED":
-        # Generate rule names matching AWS format
-        ts = "0000000000000"
+        # Generate rule names matching AWS format (timestamp in milliseconds)
+        ts_ms = int(now.timestamp() * 1000)
         prefixes = ["PKC", "SKC", "PKT", "SKT"]
         result["ContributorInsightsRuleList"] = [
-            f"DynamoDBContributorInsights-{p}-{table_name}-{ts}"
+            f"DynamoDBContributorInsights-{p}-{table_name}-{ts_ms}"
             for p in prefixes
         ]
+        result["LastUpdateDateTime"] = now.isoformat()
 
     return json_ok(result)
 
@@ -1054,6 +1139,13 @@ def handle_update_global_table_settings(body: dict) -> Response:
 # Table replica auto scaling handlers
 # ------------------------------------------------------------------
 
+_AUTOSCALING_ROLE_ARN = (
+    "arn:aws:iam::123456789012:role/aws-service-role/"
+    "dynamodb.application-autoscaling.amazonaws.com/"
+    "AWSServiceRoleForApplicationAutoScaling_DynamoDBTable"
+)
+
+
 def _build_replica_autoscaling(table_name: str) -> list:
     """Build Replicas list for TableAutoScalingDescription."""
     replicas = sm.get_replicas(table_name)
@@ -1073,12 +1165,30 @@ def _build_replica_autoscaling(table_name: str) -> list:
             "ReplicaProvisionedReadCapacityAutoScalingSettings": {
                 "MinimumUnits": rcu,
                 "MaximumUnits": 40000,
-                "AutoScalingDisabled": True,
+                "AutoScalingDisabled": False,
+                "AutoScalingRoleArn": _AUTOSCALING_ROLE_ARN,
+                "ScalingPolicies": [
+                    {
+                        "PolicyName": f"DynamoDBReadCapacityUtilization:table/{table_name}",
+                        "TargetTrackingScalingPolicyConfiguration": {
+                            "TargetValue": 70.0,
+                        },
+                    }
+                ],
             },
             "ReplicaProvisionedWriteCapacityAutoScalingSettings": {
                 "MinimumUnits": wcu,
                 "MaximumUnits": 40000,
-                "AutoScalingDisabled": True,
+                "AutoScalingDisabled": False,
+                "AutoScalingRoleArn": _AUTOSCALING_ROLE_ARN,
+                "ScalingPolicies": [
+                    {
+                        "PolicyName": f"DynamoDBWriteCapacityUtilization:table/{table_name}",
+                        "TargetTrackingScalingPolicyConfiguration": {
+                            "TargetValue": 70.0,
+                        },
+                    }
+                ],
             },
             "ReplicaStatus": r.replica_status,
         })

@@ -33,6 +33,8 @@ REQUIRED_DYNAMIC_KEYS = {
     "LatestStreamLabel",
     "BackupCreationDateTime",
     "TableCreationDateTime",
+    "RestoreDateTime",
+    "LastUpdateDateTime",
     # ARNs — emulator generates correct structure but region/account differ from RST
     "BackupArn",
     "TableArn",
@@ -41,54 +43,49 @@ REQUIRED_DYNAMIC_KEYS = {
     "GlobalTableArn",
     "SourceBackupArn",
     "SourceTableArn",
-}
-
-# Dynamic fields that are completely stripped from both expected and actual.
-# Use for fields the emulator may not produce at all, or whose absence is acceptable.
-OPTIONAL_DYNAMIC_KEYS = {
-    # Timestamps — emulator may omit or differ
-    "LastUpdateToPayPerRequestDateTime",
-    "EarliestRestorableDateTime",
-    "LatestRestorableDateTime",
-    "RestoreDateTime",
-    "LastUpdateDateTime",
-    # ARNs — emulator may omit or stub
-    "KMSMasterKeyArn",
-    "AutoScalingRoleArn",
-    # IDs — DDB Local returns empty string; real AWS returns UUIDs
-    "TableId",
-    # Runtime data — not stable (RST golden values reflect real AWS data)
+    # Runtime counters/sizes — emulator returns real values but RST reflects real AWS data
+    "ItemCount",
     "TableSizeBytes",
     "IndexSizeBytes",
     "BackupSizeBytes",
-    "ItemCount",
-    # RST golden output contains real AWS account data
-    "TableNames",
-    "NextToken",
-    # Endpoint address differs between emulator and real AWS
-    "Address",
-    # DynamoDB Local does not track these
     "NumberOfDecreasesToday",
-    # Vera stubs — rule names are generated
-    "ContributorInsightsRuleList",
-    # ItemCollectionMetrics — vera does not return this
-    "ItemCollectionMetrics",
-    # Per-type capacity breakdown — vera returns only CapacityUnits
-    "ReadCapacityUnits",
-    "WriteCapacityUnits",
-    # BillingModeSummary — vera does not return this in update/restore responses
+    # Structural fields emulator always returns
     "BillingModeSummary",
-    # Backfilling — vera does not return this for GSI
     "Backfilling",
-    # RestoreInProgress — vera completes restores synchronously (always false)
     "RestoreInProgress",
-    # AutoScaling policy details — vera stubs these as AutoScalingDisabled
+    # IDs — vera generates a UUID
+    "TableId",
+    # PITR restore window timestamps
+    "EarliestRestorableDateTime",
+    "LatestRestorableDateTime",
+    # ARNs — may appear in SSE or autoscaling responses
+    "KMSMasterKeyArn",
+    "AutoScalingRoleArn",
+    # Autoscaling policy details — vera generates these for replicas
+    "ContributorInsightsRuleList",
     "ScalingPolicies",
     "PolicyName",
     "TargetTrackingScalingPolicyConfiguration",
-    # Replica provisioned capacity units — differ between emulator and real AWS
+    # Replica capacity details
     "ReplicaProvisionedReadCapacityUnits",
     "ReplicaProvisionedWriteCapacityUnits",
+}
+
+# Dynamic fields that are completely stripped from both expected and actual.
+# Use only for fields the emulator genuinely does not produce.
+OPTIONAL_DYNAMIC_KEYS = {
+    # RST golden output contains real AWS account data / fake pagination tokens
+    "TableNames",
+    "NextToken",
+    # Endpoint address differs
+    "Address",
+    # Not produced by emulator
+    "ItemCollectionMetrics",
+    # DDB Local does not return capacity unit breakdowns in ConsumedCapacity
+    "ReadCapacityUnits",
+    "WriteCapacityUnits",
+    # Only present when billing mode changed from PAY_PER_REQUEST → PROVISIONED
+    "LastUpdateToPayPerRequestDateTime",
 }
 
 # Combined set for convenience
