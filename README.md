@@ -121,3 +121,89 @@ Seeded resources (a default network, common zones, machine types, and image fami
 
 ---
 
+## GitHub Actions
+
+Use the `vera-setup` action to run your infrastructure tests against Vera in CI — no cloud accounts or credentials required.
+
+```yaml
+# .github/workflows/test.yml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: project-vera/vera/.github/actions/vera-setup@main
+
+      # Your test steps here — emulators are ready, env vars are set
+```
+
+After `vera-setup` runs, the following environment variables are automatically available to all subsequent steps:
+
+| Variable | Value |
+|----------|-------|
+| `AWS_ENDPOINT_URL` | `http://localhost:5003` |
+| `AWS_ACCESS_KEY_ID` | `test` |
+| `AWS_SECRET_ACCESS_KEY` | `test` |
+| `AWS_DEFAULT_REGION` | `us-east-1` |
+| `CLOUDSDK_API_ENDPOINT_OVERRIDES_COMPUTE` | `http://localhost:9100/` |
+| `CLOUDSDK_CORE_PROJECT` | `vera-project` |
+| `CLOUDSDK_AUTH_DISABLE_CREDENTIALS` | `true` |
+
+### Terraform
+
+No changes to your `.tf` files needed. The AWS provider picks up `AWS_ENDPOINT_URL` automatically.
+
+```yaml
+- uses: project-vera/vera/.github/actions/vera-setup@main
+- uses: hashicorp/setup-terraform@v3
+- run: terraform init && terraform apply -auto-approve
+```
+
+### AWS CLI
+
+```yaml
+- uses: project-vera/vera/.github/actions/vera-setup@main
+- run: aws ec2 describe-instances
+```
+
+### gcloud CLI
+
+```yaml
+- uses: project-vera/vera/.github/actions/vera-setup@main
+- run: gcloud compute instances list --project=vera-project
+```
+
+### boto3 (Python)
+
+`AWS_ENDPOINT_URL` must be passed explicitly — boto3 does not read it automatically.
+
+```python
+import boto3, os
+
+ec2 = boto3.client('ec2', endpoint_url=os.environ['AWS_ENDPOINT_URL'])
+ec2.describe_instances()
+```
+
+### Options
+
+```yaml
+- uses: project-vera/vera/.github/actions/vera-setup@main
+  with:
+    start-aws: 'true'   # set 'false' to skip the AWS emulator
+    start-gcp: 'false'  # set 'false' to skip the GCP emulator
+    wait-timeout: '120' # seconds to wait for emulators to be ready
+```
+
+Add a cleanup step at the end of your job to stop the containers:
+
+```yaml
+- name: Cleanup
+  if: always()
+  run: |
+    docker rm -f vera-aws 2>/dev/null || true
+    docker rm -f vera-gcp 2>/dev/null || true
+```
+
+---
+
