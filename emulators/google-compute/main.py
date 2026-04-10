@@ -302,13 +302,32 @@ def _seed_defaults() -> None:
             description="Default network for the project",
         )
         logger.info("Seeded default VPC network")
-    _CPU_PLATFORMS_ABCF = [
+    _CPU_PLATFORMS_AB = [
         "Ampere Altra",
         "Intel Broadwell",
         "Intel Cascade Lake",
         "Intel Emerald Rapids",
         "AMD Genoa",
         "NVIDIA Grace",
+        "Intel Granite Rapids",
+        "Intel Haswell",
+        "Intel Ice Lake",
+        "Intel Ivy Bridge",
+        "Google Axion",
+        "AMD Milan",
+        "AMD Rome",
+        "Intel Sandy Bridge",
+        "Intel Sapphire Rapids",
+        "Intel Skylake",
+        "Google Axion",
+        "AMD Turin",
+    ]
+    _CPU_PLATFORMS_F = [
+        "Ampere Altra",
+        "Intel Broadwell",
+        "Intel Cascade Lake",
+        "Intel Emerald Rapids",
+        "AMD Genoa",
         "Intel Granite Rapids",
         "Intel Haswell",
         "Intel Ice Lake",
@@ -349,7 +368,7 @@ def _seed_defaults() -> None:
             creation_timestamp="1969-12-31T16:00:00.000-08:00",
             id="2000",
             supports_pzs=True,
-            available_cpu_platforms=_CPU_PLATFORMS_ABCF,
+            available_cpu_platforms=_CPU_PLATFORMS_AB,
         )
         logger.info("Seeded zone us-central1-a")
     if "us-central1-b" not in state.zones:
@@ -361,7 +380,7 @@ def _seed_defaults() -> None:
             creation_timestamp="1969-12-31T16:00:00.000-08:00",
             id="2001",
             supports_pzs=True,
-            available_cpu_platforms=_CPU_PLATFORMS_ABCF,
+            available_cpu_platforms=_CPU_PLATFORMS_AB,
         )
         logger.info("Seeded zone us-central1-b")
     if "us-central1-c" not in state.zones:
@@ -385,7 +404,7 @@ def _seed_defaults() -> None:
             creation_timestamp="1969-12-31T16:00:00.000-08:00",
             id="2004",
             supports_pzs=False,
-            available_cpu_platforms=_CPU_PLATFORMS_ABCF,
+            available_cpu_platforms=_CPU_PLATFORMS_F,
         )
         logger.info("Seeded zone us-central1-f")
     if "us-central1" not in state.regions:
