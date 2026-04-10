@@ -298,7 +298,6 @@ Dynamic fields fall into two categories:
 | `TableArn`, `IndexArn`, `LatestStreamArn`, `BackupArn`, `GlobalTableArn`, `SourceTableArn`, `SourceBackupArn` | ARNs contain account ID / region that differ from real AWS |
 | `KMSMasterKeyArn`, `AutoScalingRoleArn` | ARNs vera generates with fake account ID |
 | `TableId` | UUID vera generates per table (DynamoDB Local returns empty string) |
-| `TableNames` | Vera returns actual local table names (differ from RST golden which has real AWS tables) |
 | `ItemCount`, `TableSizeBytes`, `IndexSizeBytes`, `BackupSizeBytes` | Runtime data — vera returns actual values, RST reflects pre-populated real AWS tables |
 | `NumberOfDecreasesToday` | DynamoDB Local always returns 0; key is present |
 | `ReadCapacityUnits`, `WriteCapacityUnits` | Vera injects from stored provisioned throughput; values are structurally correct |
@@ -326,15 +325,17 @@ Comparison uses **subset matching**: expected fields must be present and equal i
 
 ### Results
 
-Current eval results against 41 RST example files (189 runnable commands):
+Current eval results against 41 RST example files (193 runnable commands):
 
 | Metric | Value |
 |---|---|
-| RST files passing | 40 / 41 (97.6%) |
-| Commands exit OK | 189 / 189 (100%) |
-| Commands output match | 187 / 189 (98.9%) |
+| RST files passing | 39 / 41 (95.1%) |
+| Commands exit OK | 193 / 193 (100%) |
+| Commands output match | 190 / 193 (98.4%) |
 
-The 1 failing RST file (`list-contributor-insights.rst`) has pagination token handling that does not match real AWS behavior.
+The 2 failing RST files:
+- `list-tables.rst` — the `--starting-token` command passes a fake AWS pagination token that DynamoDB Local cannot interpret, returning an empty list instead of the expected page
+- `list-backups.rst` — the `--max-items 1` command returns the second backup instead of the first due to backup naming in the setup
 
 ## Configuration
 

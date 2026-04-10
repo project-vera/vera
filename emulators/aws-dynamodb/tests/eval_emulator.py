@@ -49,8 +49,6 @@ REQUIRED_DYNAMIC_KEYS = {
     "IndexSizeBytes",
     "BackupSizeBytes",
     "NumberOfDecreasesToday",
-    # Table list — vera returns actual local tables (differ from RST golden which has real AWS tables)
-    "TableNames",
     # Capacity units — vera injects from stored provisioned throughput
     "ReadCapacityUnits",
     "WriteCapacityUnits",
