@@ -394,20 +394,17 @@ class Vpc_Backend:
         if attribute not in supported_attributes:
             return create_error_response("InvalidParameterValue", f"Invalid attribute '{attribute}'")
 
+        # fixed https://github.com/project-vera/vera/issues/38
         return {
-            'enableDnsHostnames': [
-                {
-                    'Value': vpc.enable_dns_hostnames,
-                }
-            ],
+            'enableDnsHostnames': {
+                'Value': vpc.enable_dns_hostnames,
+            },
             'enableDnsSupport': {
                 'Value': vpc.enable_dns_support,
-                },
-            'enableNetworkAddressUsageMetrics': [
-                {
-                    'Value': vpc.enable_network_address_usage_metrics,
-                }
-            ],
+            },
+            'enableNetworkAddressUsageMetrics': {
+                'Value': vpc.enable_network_address_usage_metrics,
+            },
             'vpcId': vpc.vpc_id,
             }
 
@@ -861,14 +858,12 @@ class vpc_ResponseSerializer:
             param_data = data[_enableDnsHostnames_key]
             indent_str = "    " * 1
             if param_data:
-                xml_parts.append(f'{indent_str}<enableDnsHostnamesSet>')
-                for item in param_data:
-                    xml_parts.append(f'{indent_str}    <item>')
-                    xml_parts.extend(vpc_ResponseSerializer._serialize_nested_fields(item, 2))
-                    xml_parts.append(f'{indent_str}    </item>')
-                xml_parts.append(f'{indent_str}</enableDnsHostnamesSet>')
+                # fixed https://github.com/project-vera/vera/issues/38
+                xml_parts.append(f'{indent_str}<enableDnsHostnames>')
+                xml_parts.extend(vpc_ResponseSerializer._serialize_nested_fields(param_data, 2))
+                xml_parts.append(f'{indent_str}</enableDnsHostnames>')
             else:
-                xml_parts.append(f'{indent_str}<enableDnsHostnamesSet/>')
+                xml_parts.append(f'{indent_str}<enableDnsHostnames/>')
         # Serialize enableDnsSupport
         _enableDnsSupport_key = None
         if "enableDnsSupport" in data:
@@ -891,14 +886,12 @@ class vpc_ResponseSerializer:
             param_data = data[_enableNetworkAddressUsageMetrics_key]
             indent_str = "    " * 1
             if param_data:
-                xml_parts.append(f'{indent_str}<enableNetworkAddressUsageMetricsSet>')
-                for item in param_data:
-                    xml_parts.append(f'{indent_str}    <item>')
-                    xml_parts.extend(vpc_ResponseSerializer._serialize_nested_fields(item, 2))
-                    xml_parts.append(f'{indent_str}    </item>')
-                xml_parts.append(f'{indent_str}</enableNetworkAddressUsageMetricsSet>')
+                # fixed https://github.com/project-vera/vera/issues/38
+                xml_parts.append(f'{indent_str}<enableNetworkAddressUsageMetrics>')
+                xml_parts.extend(vpc_ResponseSerializer._serialize_nested_fields(param_data, 2))
+                xml_parts.append(f'{indent_str}</enableNetworkAddressUsageMetrics>')
             else:
-                xml_parts.append(f'{indent_str}<enableNetworkAddressUsageMetricsSet/>')
+                xml_parts.append(f'{indent_str}<enableNetworkAddressUsageMetrics/>')
         # Serialize vpcId
         _vpcId_key = None
         if "vpcId" in data:
