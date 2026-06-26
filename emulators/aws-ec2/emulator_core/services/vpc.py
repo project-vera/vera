@@ -644,10 +644,19 @@ class vpc_RequestParser:
 
     @staticmethod
     def parse_modify_vpc_attribute_request(md: Dict[str, Any]) -> Dict[str, Any]:
+        def attr_value(name: str):
+            value = get_scalar(md, name)
+            if value is not None:
+                return value
+            nested_value = get_scalar(md, f"{name}.Value")
+            if nested_value is not None:
+                return {"Value": nested_value}
+            return None
+
         return {
-            "EnableDnsHostnames": get_scalar(md, "EnableDnsHostnames"),
-            "EnableDnsSupport": get_scalar(md, "EnableDnsSupport"),
-            "EnableNetworkAddressUsageMetrics": get_scalar(md, "EnableNetworkAddressUsageMetrics"),
+            "EnableDnsHostnames": attr_value("EnableDnsHostnames"),
+            "EnableDnsSupport": attr_value("EnableDnsSupport"),
+            "EnableNetworkAddressUsageMetrics": attr_value("EnableNetworkAddressUsageMetrics"),
             "VpcId": get_scalar(md, "VpcId"),
         }
 
@@ -1041,4 +1050,3 @@ class vpc_ResponseSerializer:
         if action not in serializers:
             raise ValueError(f"Unknown action: {action}")
         return serializers[action](data, request_id)
-
