@@ -508,9 +508,6 @@ class SecurityGroup_Backend:
             tag_set=tags,
             vpc_id=vpc_id,
         )
-        if params.get("VpcId"):
-            self._register_vpc_association(resource, vpc_id, state="associated")
-
         self.resources[group_id] = resource
 
         if params.get("VpcId"):
@@ -540,7 +537,11 @@ class SecurityGroup_Backend:
                 "SecurityGroup has dependent AuthorizationRule(s) and cannot be deleted.",
             )
 
-        if group.associated_vpc_ids:
+        extra_associated_vpc_ids = [
+            vpc_id for vpc_id in group.associated_vpc_ids
+            if vpc_id != group.vpc_id
+        ]
+        if extra_associated_vpc_ids:
             return create_error_response(
                 "DependencyViolation",
                 "SecurityGroup has VPC associations and cannot be deleted.",
