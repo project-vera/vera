@@ -68,9 +68,11 @@ jobs:
           python3 - <<'EOF'
           import json, sys
           from pathlib import Path
-          # The instance-based cases (01-04, 06) fail on a fresh emulator
-          # because no AMI is seeded (see PR #43); add them once that lands.
-          REQUIRED = {"00-simple-vpc", "05-vpc-with-subnet"}
+          REQUIRED = {
+              "00-simple-vpc", "01-hello-world", "02-one-server",
+              "03-one-webserver", "04-one-webserver-with-vars",
+              "05-vpc-with-subnet", "06-instance-in-vpc",
+          }
           runs = sorted(p for p in Path('tests/tf/runs').iterdir() if p.is_dir())
           summary = runs[-1] / 'summary.json' if runs else None
           if not summary or not summary.exists():

@@ -426,7 +426,32 @@ class Vpc_Backend:
         else:
             resources = list(self.resources.values())
 
-        resources = apply_filters(resources, params.get("Filter.N", []))
+        filters = params.get("Filter.N", []) or []
+        special_filter_names = {
+            "cidr-block-association.association-id",
+            "ipv6-cidr-block-association.association-id",
+        }
+        for resource_filter in filters:
+            name = resource_filter.get("Name", "")
+            values = set(resource_filter.get("Values", []) or [])
+            if name not in special_filter_names or not values:
+                continue
+            association_attr = (
+                "ipv6_cidr_block_association_set"
+                if name.startswith("ipv6-")
+                else "cidr_block_association_set"
+            )
+            resources = [
+                resource
+                for resource in resources
+                if any(
+                    str(association.get("associationId", "")) in values
+                    for association in getattr(resource, association_attr, []) or []
+                    if isinstance(association, dict)
+                )
+            ]
+        normal_filters = [f for f in filters if f.get("Name", "") not in special_filter_names]
+        resources = apply_filters(resources, normal_filters)
         vpc_set = [resource.to_dict() for resource in resources[:max_results]]
 
         return {
