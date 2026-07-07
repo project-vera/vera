@@ -103,6 +103,7 @@ class Instance:
     elastic_ip_addresse_ids: List[str] = field(default_factory=list)  # tracks ElasticIpAddresse children
     route_table_ids: List[str] = field(default_factory=list)  # tracks RouteTable children
     spot_instance_ids: List[str] = field(default_factory=list)  # tracks SpotInstance children
+    terminated_at: str = ""
 
     disable_api_termination: bool = False
     disable_api_stop: bool = False
@@ -219,6 +220,20 @@ class Instance_Backend:
 
     def _set_instance_state(self, instance: Instance, name: str, code: int) -> None:
         instance.instance_state = {"code": code, "name": name}
+
+    def _cleanup_terminated_instances(self, grace_seconds: int = 60) -> None:
+        now = datetime.now(timezone.utc)
+        for instance_id, instance in list(self.resources.items()):
+            if (instance.instance_state or {}).get("name") != "terminated" or not instance.terminated_at:
+                continue
+            try:
+                terminated_at = datetime.fromisoformat(instance.terminated_at)
+            except ValueError:
+                continue
+            if terminated_at.tzinfo is None:
+                terminated_at = terminated_at.replace(tzinfo=timezone.utc)
+            if (now - terminated_at).total_seconds() >= grace_seconds:
+                del self.resources[instance_id]
 
     def _ensure_store(self, attr: str) -> Dict[str, Any]:
         if not hasattr(self.state, attr):
@@ -409,7 +424,7 @@ class Instance_Backend:
             'groupSet': instance.group_set,
             'instanceId': instance.instance_id or instance_id,
             'instanceInitiatedShutdownBehavior': {
-                'Value': instance.instance_initiated_shutdown_behavior,
+                'Value': instance.instance_initiated_shutdown_behavior or "stop",
                 },
             'instanceType': {
                 'Value': instance.instance_type,
@@ -438,7 +453,7 @@ class Instance_Backend:
         attribute_map = {
             "blockdevicemapping": "blockDeviceMapping",
             "disableapistop": "disableApiStop",
-            "disableaptermination": "disableApiTermination",
+            "disableapitermination": "disableApiTermination",
             "ebsoptimized": "ebsOptimized",
             "enasupport": "enaSupport",
             "enclaveoptions": "enclaveOptions",
@@ -458,27 +473,11 @@ class Instance_Backend:
         if attribute_key:
             value = response.get(attribute_key)
             return {
-                'blockDeviceMapping': None,
-                'disableApiStop': None,
-                'disableApiTermination': None,
-                'ebsOptimized': None,
-                'enaSupport': None,
-                'enclaveOptions': None,
-                'groupSet': None,
                 'instanceId': instance.instance_id or instance_id,
-                'instanceInitiatedShutdownBehavior': None,
-                'instanceType': None,
-                'kernel': None,
-                'productCodes': None,
-                'ramdisk': None,
-                'rootDeviceName': None,
-                'sourceDestCheck': None,
-                'sriovNetSupport': None,
-                'userData': None,
-                **{attribute_key: value},
+                attribute_key: value,
             }
 
-        return response
+        return create_error_response("InvalidParameterValue", f"Invalid instance attribute: {attribute}")
 
     def DescribeInstanceCreditSpecifications(self, params: Dict[str, Any]):
         """Describes the credit option for CPU usage of the specified burstable performance
@@ -517,6 +516,8 @@ class Instance_Backend:
         """Describes the specified instances or all instances. If you specify instance IDs, the output includes information for only the specified
             instances. If you specify filters, the output includes information for only those
             instances that meet the filter criteria. If you do not spe"""
+
+        self._cleanup_terminated_instances()
 
         instance_ids = params.get("InstanceId.N", []) or []
         for instance_id in instance_ids:
@@ -1608,6 +1609,8 @@ class Instance_Backend:
 
             previous_state = instance.instance_state or {"code": 0, "name": "pending"}
             self._set_instance_state(instance, "terminated", 48)
+            if not instance.terminated_at:
+                instance.terminated_at = self._now_isoformat()
             instances_set.append({
                 "currentState": instance.instance_state,
                 "instanceId": instance.instance_id,
@@ -1629,8 +1632,6 @@ class Instance_Backend:
             parent = self.state.vpcs.get(instance.vpc_id)
             if parent and hasattr(parent, 'instance_ids') and instance_id in parent.instance_ids:
                 parent.instance_ids.remove(instance_id)
-
-            del self.resources[instance_id]
 
         return {
             'instancesSet': instances_set,
@@ -3447,4 +3448,3 @@ class instance_ResponseSerializer:
         if action not in serializers:
             raise ValueError(f"Unknown action: {action}")
         return serializers[action](data, request_id)
-
