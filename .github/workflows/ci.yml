@@ -15,9 +15,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Caching is off: the post-run cache step (uv cache prune --ci) breaks
+      # against newer uv releases, and uv sync here only installs flask.
       - uses: astral-sh/setup-uv@v5
         with:
-          cache-suffix: aws-ec2
+          enable-cache: false
 
       # aws CLI and terraform are preinstalled on ubuntu-latest, so this
       # just runs uv sync, writes the [vera] profile, and creates the
@@ -112,9 +114,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Caching is off: the post-run cache step (uv cache prune --ci) breaks
+      # against newer uv releases, and uv sync here only installs flask.
       - uses: astral-sh/setup-uv@v5
         with:
-          cache-suffix: google-compute
+          enable-cache: false
 
       # gcloud is preinstalled on ubuntu-latest; install.sh runs uv sync and
       # creates the gcpcli wrapper with an isolated gcloud config.
