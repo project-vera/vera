@@ -55,15 +55,7 @@ jobs:
               sys.exit(f"FAIL: success rate {rate:.1f}% is below threshold {THRESHOLD}%")
           EOF
 
-      # As of 2026-07 the suite hangs at 00-simple-vpc on main (issue #38,
-      # fixed by PR #48): the AWS provider can't parse DescribeVpcAttribute
-      # and polls until timeout, and run_terraform_tests.py crashes on
-      # subprocess TimeoutExpired without writing summary.json. Until that
-      # lands, this step is informational (continue-on-error) and REQUIRED
-      # below is empty. After PR #48 merges: drop continue-on-error and add
-      # the passing cases to REQUIRED.
-      - name: Run Terraform test suite (informational until issue #38 fix lands)
-        continue-on-error: true
+      - name: Run Terraform test suite
         run: |
           source .venv/bin/activate
           python tests/tf/run_terraform_tests.py --backend vera-aws --all --timeout-s 300
@@ -76,7 +68,9 @@ jobs:
           python3 - <<'EOF'
           import json, sys
           from pathlib import Path
-          REQUIRED = set()  # e.g. {"00-simple-vpc", "01-hello-world"} once green on main
+          # The instance-based cases (01-04, 06) fail on a fresh emulator
+          # because no AMI is seeded (see PR #43); add them once that lands.
+          REQUIRED = {"00-simple-vpc", "05-vpc-with-subnet"}
           runs = sorted(p for p in Path('tests/tf/runs').iterdir() if p.is_dir())
           summary = runs[-1] / 'summary.json' if runs else None
           if not summary or not summary.exists():

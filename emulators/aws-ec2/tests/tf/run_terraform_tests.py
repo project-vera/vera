@@ -45,14 +45,24 @@ BACKENDS: Dict[str, BackendConfig] = {
 def run(cmd: List[str], cwd: Path, env: Dict[str, str], timeout_s: int) -> Tuple[int, str, str]:
     # Do not set executable= here: with a argv list, overriding executable to bash
     # makes the first arg ("terraform") be treated as a script path, breaking init/apply.
-    proc = subprocess.run(
-        cmd,
-        cwd=str(cwd),
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=timeout_s,
-    )
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=str(cwd),
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+        )
+    except subprocess.TimeoutExpired as exc:
+        # A hung step (e.g. a provider polling forever) counts as a failed
+        # step instead of aborting the whole run without a summary.json.
+        def _decode(stream) -> str:
+            if stream is None:
+                return ""
+            return stream.decode(errors="replace") if isinstance(stream, bytes) else stream
+
+        return 124, _decode(exc.stdout), _decode(exc.stderr) + f"\n[runner] step timed out after {timeout_s}s"
     return proc.returncode, proc.stdout, proc.stderr
 
 
