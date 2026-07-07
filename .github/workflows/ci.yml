@@ -1,0 +1,162 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  aws-ec2:
+    name: AWS EC2 emulator tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: emulators/aws-ec2
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      # aws CLI and terraform are preinstalled on ubuntu-latest, so this
+      # just runs uv sync, writes the [vera] profile, and creates the
+      # awscli/terlocal wrappers.
+      - name: Install dependencies and wrappers
+        run: bash install.sh
+
+      - name: Start emulator
+        run: |
+          nohup uv run main.py > emulator.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -s --max-time 2 -o /dev/null http://localhost:5003 && exit 0
+            sleep 1
+          done
+          echo "Emulator failed to start within 30s"
+          cat emulator.log
+          exit 1
+
+      - name: Run CLI test suite
+        run: |
+          source .venv/bin/activate
+          cd tests
+          python eval_emulator.py test.sh
+
+      # eval_emulator.py measures fidelity and always exits 0; gate on the
+      # success rate staying at or above the current baseline.
+      - name: Gate on CLI success rate
+        run: |
+          python3 - <<'EOF'
+          import json, sys
+          THRESHOLD = 79.0  # % — measured main baseline 2026-07: 221/274 (80.7%); raise as fidelity improves
+          with open('tests/eval_results_emulator.json') as f:
+              s = json.load(f)['summary']
+          rate = 100.0 * s['successful'] / s['total']
+          print(f"CLI commands: {s['successful']}/{s['total']} succeeded ({rate:.1f}%)")
+          if rate < THRESHOLD:
+              sys.exit(f"FAIL: success rate {rate:.1f}% is below threshold {THRESHOLD}%")
+          EOF
+
+      # As of 2026-07 the suite hangs at 00-simple-vpc on main (issue #38,
+      # fixed by PR #48): the AWS provider can't parse DescribeVpcAttribute
+      # and polls until timeout, and run_terraform_tests.py crashes on
+      # subprocess TimeoutExpired without writing summary.json. Until that
+      # lands, this step is informational (continue-on-error) and REQUIRED
+      # below is empty. After PR #48 merges: drop continue-on-error and add
+      # the passing cases to REQUIRED.
+      - name: Run Terraform test suite (informational until issue #38 fix lands)
+        continue-on-error: true
+        run: |
+          source .venv/bin/activate
+          python tests/tf/run_terraform_tests.py --backend vera-aws --all --timeout-s 300
+
+      # run_terraform_tests.py always exits 0; gate on the required cases.
+      # Cases not in REQUIRED are reported but don't fail the build — add
+      # them here as they start passing on main.
+      - name: Gate on Terraform results
+        run: |
+          python3 - <<'EOF'
+          import json, sys
+          from pathlib import Path
+          REQUIRED = set()  # e.g. {"00-simple-vpc", "01-hello-world"} once green on main
+          runs = sorted(p for p in Path('tests/tf/runs').iterdir() if p.is_dir())
+          summary = runs[-1] / 'summary.json' if runs else None
+          if not summary or not summary.exists():
+              print("No terraform summary.json (suite crashed or never ran)")
+              sys.exit(1 if REQUIRED else 0)
+          results = json.loads(summary.read_text())
+          failed_required = []
+          for r in results:
+              status = "PASS" if r["passed"] else "FAIL"
+              gate = "required" if r["case"] in REQUIRED else "informational"
+              print(f'{status} ({gate}): {r["case"]}')
+              if r["case"] in REQUIRED and not r["passed"]:
+                  failed_required.append(r["case"])
+          if failed_required:
+              sys.exit(f"FAIL: required terraform cases failed: {failed_required}")
+          EOF
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aws-ec2-results
+          path: |
+            emulators/aws-ec2/tests/eval_results_emulator.json
+            emulators/aws-ec2/tests/tf/runs/
+            emulators/aws-ec2/emulator.log
+          if-no-files-found: ignore
+
+  google-compute:
+    name: GCP Compute emulator tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: emulators/google-compute
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      # gcloud is preinstalled on ubuntu-latest; install.sh runs uv sync and
+      # creates the gcpcli wrapper with an isolated gcloud config.
+      - name: Install dependencies and wrappers
+        run: bash install.sh
+
+      - name: Start emulator
+        run: |
+          nohup uv run main.py > emulator.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -s --max-time 2 -o /dev/null http://localhost:9100 && exit 0
+            sleep 1
+          done
+          echo "Emulator failed to start within 30s"
+          cat emulator.log
+          exit 1
+
+      - name: Run CLI test suite
+        run: |
+          source .venv/bin/activate
+          cd tests
+          python eval_emulator.py test.sh --endpoint http://localhost:9100
+
+      - name: Gate on CLI success rate
+        run: |
+          python3 - <<'EOF'
+          import json, sys
+          THRESHOLD = 100.0  # % — all 51 commands pass on main today
+          with open('tests/eval_results_emulator.json') as f:
+              s = json.load(f)['summary']
+          rate = 100.0 * s['successful'] / s['total']
+          print(f"CLI commands: {s['successful']}/{s['total']} succeeded ({rate:.1f}%)")
+          if rate < THRESHOLD:
+              sys.exit(f"FAIL: success rate {rate:.1f}% is below threshold {THRESHOLD}%")
+          EOF
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: google-compute-results
+          path: |
+            emulators/google-compute/tests/eval_results_emulator.json
+            emulators/google-compute/emulator.log
+          if-no-files-found: ignore
