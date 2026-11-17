@@ -9,6 +9,7 @@ from ..utils import (get_scalar, get_int, get_indexed_list, parse_filters, apply
                     parse_tags, str2bool, esc, create_error_response,
                     is_error_response, serialize_error_response)
 from ..state import EC2State
+from ..utils import parse_ipv4_cidr, invalid_cidr_error
 
 class ResourceState(Enum):
     PENDING = 'pending'
@@ -131,6 +132,27 @@ class Subnet_Backend:
 
     def _get_subnet_or_error(self, subnet_id: str, error_code: str = "InvalidSubnetID.NotFound"):
         return self._get_resource_or_error(self.resources, subnet_id, error_code, f"The ID '{subnet_id}' does not exist")
+
+    def _validate_subnet_cidr(self, vpc, cidr_block: str):
+        net = parse_ipv4_cidr(cidr_block)
+        if net is None:
+            return invalid_cidr_error(cidr_block)
+        if not 16 <= net.prefixlen <= 28:
+            return create_error_response("InvalidSubnet.Range", f"The CIDR '{cidr_block}' is invalid.")
+        vpc_nets = [
+            parse_ipv4_cidr(assoc.get("cidrBlock"))
+            for assoc in vpc.cidr_block_association_set
+            if (assoc.get("cidrBlockState") or {}).get("state") != "disassociated"
+        ]
+        if not any(v is not None and net.subnet_of(v) for v in vpc_nets):
+            return create_error_response("InvalidSubnet.Range", f"The CIDR '{cidr_block}' is invalid.")
+        for other in self.resources.values():
+            other_net = parse_ipv4_cidr(other.cidr_block) if other.vpc_id == vpc.vpc_id else None
+            if other_net is not None and net.overlaps(other_net):
+                return create_error_response(
+                    "InvalidSubnet.Conflict", f"The CIDR '{cidr_block}' conflicts with another subnet"
+                )
+        return None
 
     def _extract_tags(self, tag_specs: List[Dict[str, Any]], resource_type: str) -> List[Dict[str, Any]]:
         tags: List[Dict[str, Any]] = []
@@ -338,6 +360,11 @@ class Subnet_Backend:
         ipv6_native = str2bool(params.get("Ipv6Native"))
         outpost_arn = params.get("OutpostArn") or ""
 
+        if cidr_block:
+            error = self._validate_subnet_cidr(vpc, cidr_block)
+            if error:
+                return error
+
         tag_set = self._extract_tags(params.get("TagSpecification.N", []) or [], "subnet")
 
         ipv6_cidr_block_association_set: List[Dict[str, Any]] = []
@@ -355,12 +382,8 @@ class Subnet_Backend:
 
         available_ip_address_count = 0
         if cidr_block:
-            try:
-                net = ipaddress.ip_network(cidr_block, strict=False)
-                if net.version == 4:
-                    available_ip_address_count = max(net.num_addresses - 5, 0)
-            except ValueError:
-                available_ip_address_count = 0
+            net = parse_ipv4_cidr(cidr_block)
+            available_ip_address_count = max(net.num_addresses - 5, 0)
 
         subnet_id = self._generate_id("subnet")
         resource = Subnet(

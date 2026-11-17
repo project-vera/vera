@@ -8,6 +8,7 @@ from ..utils import (get_scalar, get_int, get_indexed_list, parse_filters, apply
                     parse_tags, str2bool, esc, create_error_response,
                     is_error_response, serialize_error_response)
 from ..state import EC2State
+from ..utils import parse_ipv4_cidr, invalid_cidr_error
 
 class ResourceState(Enum):
     PENDING = 'pending'
@@ -112,6 +113,15 @@ class Vpc_Backend:
                 tags.append({"Key": key, "Value": tag.get("Value")})
         return tags
 
+    @staticmethod
+    def _validate_vpc_cidr(cidr_block: str):
+        net = parse_ipv4_cidr(cidr_block)
+        if net is None:
+            return invalid_cidr_error(cidr_block)
+        if not 16 <= net.prefixlen <= 28:
+            return create_error_response("InvalidVpc.Range", f"The CIDR '{cidr_block}' is invalid.")
+        return None
+
     def _build_cidr_association(self, association_id: str, cidr_block: str) -> Dict[str, Any]:
         return {
             "associationId": association_id,
@@ -169,6 +179,11 @@ class Vpc_Backend:
 
         cidr_assoc = None
         ipv6_assoc = None
+
+        if cidr_block:
+            error = self._validate_vpc_cidr(cidr_block)
+            if error:
+                return error
 
         if cidr_block or params.get("Ipv4IpamPoolId"):
             if not cidr_block:
@@ -268,6 +283,9 @@ class Vpc_Backend:
         cidr_block = params.get("CidrBlock")
         if not cidr_block:
             return create_error_response("MissingParameter", "Missing required parameter: CidrBlock")
+        error = self._validate_vpc_cidr(cidr_block)
+        if error:
+            return error
 
         instance_tenancy = params.get("InstanceTenancy") or "default"
         tag_set = self._collect_tags(params.get("TagSpecification.N", []) or [])

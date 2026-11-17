@@ -2,6 +2,7 @@ from typing import Dict, Any, List, Union, Optional
 from werkzeug.datastructures import MultiDict
 import html
 import fnmatch
+import ipaddress
 
 # ==================== TYPE ALIASES ====================
 # These help clarify what types functions return
@@ -322,6 +323,28 @@ def create_error_response(code: str, message: str) -> ErrorResponse:
             "Message": message
         }
     }
+
+def parse_ipv4_cidr(value: Any) -> Optional[ipaddress.IPv4Network]:
+    """Return the IPv4Network for a well-formed ``x.x.x.x/n`` string, else None.
+
+    Host bits are tolerated (``10.0.0.5/16`` parses as ``10.0.0.0/16``).
+    """
+    if not isinstance(value, str) or not value.rpartition("/")[2].isdigit():
+        return None
+    try:
+        net = ipaddress.ip_network(value, strict=False)
+    except ValueError:
+        return None
+    return net if net.version == 4 else None
+
+
+def invalid_cidr_error(cidr: str, param: str = "cidrBlock") -> "ErrorResponse":
+    """Error EC2 returns for a CIDR that is not a valid IPv4 CIDR block."""
+    return create_error_response(
+        "InvalidParameterValue",
+        f"Value ({cidr}) for parameter {param} is invalid. This is not a valid CIDR block.",
+    )
+
 
 def is_error_response(data: Any) -> bool:
     """

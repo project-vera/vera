@@ -8,6 +8,7 @@ from ..utils import (get_scalar, get_int, get_indexed_list, parse_filters, apply
                     parse_tags, str2bool, esc, create_error_response,
                     is_error_response, serialize_error_response)
 from ..state import EC2State
+from ..utils import parse_ipv4_cidr, invalid_cidr_error
 
 class ResourceState(Enum):
     PENDING = 'pending'
@@ -256,6 +257,9 @@ class RouteTable_Backend:
                 "MissingParameter",
                 "Missing required parameter: DestinationCidrBlock or DestinationIpv6CidrBlock or DestinationPrefixListId",
             )
+
+        if destination_cidr and parse_ipv4_cidr(destination_cidr) is None:
+            return invalid_cidr_error(destination_cidr, "destinationCidrBlock")
 
         target_values = {
             "CarrierGatewayId": params.get("CarrierGatewayId"),
